@@ -65,9 +65,12 @@ impl Sender {
         loop {
             let res = self.batch_send().await;
             match res {
-                Ok(()) => return Ok(()),
+                Ok(()) => (),
                 Err(SendError::NoStreamLeft) => return Err(NoStreamLeft),
-                _ => (),
+                _ => continue,
+            }
+            if self.send_buf.done() {
+                return Ok(());
             }
         }
     }
