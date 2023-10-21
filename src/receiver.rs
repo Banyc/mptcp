@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use scopeguard::defer;
 use thiserror::Error;
 use tokio::{
-    net::TcpStream,
+    io::AsyncRead,
     sync::{Notify, Semaphore},
     task::JoinSet,
 };
@@ -25,7 +25,10 @@ pub struct Receiver {
 }
 
 impl Receiver {
-    pub fn new(streams: Vec<TcpStream>) -> Self {
+    pub fn new<R>(streams: Vec<R>) -> Self
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+    {
         let recv_buf = Arc::new(RwLock::new(RecvStreamBuf::new()));
         let recv_buf_inserted = Arc::new(Notify::new());
         let no_stream_left = Arc::new(Semaphore::new(0));
@@ -73,7 +76,7 @@ impl Receiver {
 
             let mut handle_data_segment = |data_segment: DataSegmentMut| {
                 let readable = buf.len().min(data_segment.size());
-                buf.copy_from_slice(&data_segment.payload()[..readable]);
+                buf[..readable].copy_from_slice(&data_segment.payload()[..readable]);
                 let data_segment = data_segment.advance(readable);
                 self.data_segment = data_segment;
                 Ok(readable)

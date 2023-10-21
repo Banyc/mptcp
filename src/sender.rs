@@ -4,16 +4,22 @@ use async_async_io::write::AsyncAsyncWrite;
 use async_trait::async_trait;
 use bytes::Bytes;
 use thiserror::Error;
-use tokio::{io::AsyncWriteExt, net::TcpStream, task::JoinSet};
+use tokio::{
+    io::{AsyncWrite, AsyncWriteExt},
+    task::JoinSet,
+};
 
 use crate::send_buf::SendStreamBuf;
 
-pub struct Sender {
-    streams: VecDeque<TcpStream>,
+pub struct Sender<W> {
+    streams: VecDeque<W>,
 }
 
-impl Sender {
-    pub fn new(streams: Vec<TcpStream>) -> Self {
+impl<W> Sender<W>
+where
+    W: AsyncWrite + Unpin + Send + 'static,
+{
+    pub fn new(streams: Vec<W>) -> Self {
         Self {
             streams: streams.into(),
         }
@@ -78,7 +84,10 @@ impl Sender {
 }
 
 #[async_trait]
-impl AsyncAsyncWrite for Sender {
+impl<W> AsyncAsyncWrite for Sender<W>
+where
+    W: AsyncWrite + Unpin + Send + 'static,
+{
     async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         {
             // SAFETY: `data` will be dropped outside of this scope
