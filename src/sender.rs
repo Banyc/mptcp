@@ -80,10 +80,13 @@ impl Sender {
 #[async_trait]
 impl AsyncAsyncWrite for Sender {
     async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let data = Bytes::from_iter(buf.iter().cloned());
-        self.batch_send_all(data)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))?;
+        {
+            // SAFETY: `data` will be dropped outside of this scope
+            let data = Bytes::from_static(unsafe { std::mem::transmute(buf) });
+            self.batch_send_all(data)
+                .await
+                .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))?;
+        }
         Ok(buf.len())
     }
 
