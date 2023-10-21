@@ -1,7 +1,44 @@
 use std::io;
 
-use bytes::{Buf, BytesMut};
-use tokio::io::{AsyncRead, AsyncReadExt};
+use bytes::{Buf, Bytes, BytesMut};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
+#[derive(Debug)]
+pub struct DataSegment {
+    start_sequence: Sequence,
+    payload: Bytes,
+}
+
+impl DataSegment {
+    pub fn new(start_sequence: Sequence, payload: Bytes) -> Option<Self> {
+        if payload.is_empty() {
+            return None;
+        }
+
+        Some(Self {
+            start_sequence,
+            payload,
+        })
+    }
+
+    pub fn start_sequence(&self) -> Sequence {
+        self.start_sequence
+    }
+
+    pub fn payload(&self) -> &Bytes {
+        &self.payload
+    }
+
+    pub async fn encode<W>(&self, writer: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        writer.write_u64(self.start_sequence.inner()).await?;
+        writer.write_u64(self.payload.len() as u64).await?;
+        writer.write_all(&self.payload).await?;
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub struct DataSegmentMut {
@@ -83,5 +120,22 @@ impl Sequence {
 
     pub fn inner(&self) -> u64 {
         self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_data_segment_codec() {
+        let src =
+            DataSegment::new(Sequence(42), Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef])).unwrap();
+        let mut buf = vec![];
+        src.encode(&mut buf).await.unwrap();
+        let mut reader = io::Cursor::new(&buf[..]);
+        let dst = DataSegmentMut::decode(&mut reader).await.unwrap();
+        assert_eq!(src.start_sequence(), dst.start_sequence());
+        assert_eq!(src.payload(), dst.payload());
     }
 }

@@ -1,9 +1,8 @@
-use std::{collections::BTreeMap, io};
+use std::collections::BTreeMap;
 
 use bytes::Bytes;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-use crate::message::Sequence;
+use crate::message::{DataSegment, Sequence};
 
 pub struct SendStreamBuf {
     data: Bytes,
@@ -65,42 +64,5 @@ impl SendStreamBuf {
 
     pub fn mark_as_sent(&mut self, sequence: Sequence) {
         self.unsent_segments.remove(&sequence);
-    }
-}
-
-#[derive(Debug)]
-pub struct DataSegment {
-    start_sequence: Sequence,
-    payload: Bytes,
-}
-
-impl DataSegment {
-    pub fn new(start_sequence: Sequence, payload: Bytes) -> Option<Self> {
-        if payload.is_empty() {
-            return None;
-        }
-
-        Some(Self {
-            start_sequence,
-            payload,
-        })
-    }
-
-    pub fn start_sequence(&self) -> Sequence {
-        self.start_sequence
-    }
-
-    pub fn payload(&self) -> &Bytes {
-        &self.payload
-    }
-
-    pub async fn encode<W>(&self, writer: &mut W) -> io::Result<()>
-    where
-        W: AsyncWrite + Unpin,
-    {
-        writer.write_u64(self.start_sequence.inner()).await?;
-        writer.write_u64(self.payload.len() as u64).await?;
-        writer.write_all(&self.payload).await?;
-        Ok(())
     }
 }
