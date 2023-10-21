@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, io};
 
 use bytes::Bytes;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::message::Sequence;
 
@@ -91,5 +92,15 @@ impl DataSegment {
 
     pub fn payload(&self) -> &Bytes {
         &self.payload
+    }
+
+    pub async fn encode<W>(&self, writer: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        writer.write_u64(self.start_sequence.inner()).await?;
+        writer.write_u64(self.payload.len() as u64).await?;
+        writer.write_all(&self.payload).await?;
+        Ok(())
     }
 }
