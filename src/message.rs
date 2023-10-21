@@ -1,12 +1,12 @@
 use bytes::{Buf, BytesMut};
 
 #[derive(Debug)]
-pub struct DataSegment {
+pub struct DataSegmentMut {
     start_sequence: Sequence,
     payload: BytesMut,
 }
 
-impl DataSegment {
+impl DataSegmentMut {
     pub fn new(start_sequence: Sequence, payload: BytesMut) -> Option<Self> {
         if payload.is_empty() {
             return None;
