@@ -1,33 +1,31 @@
 use std::{collections::VecDeque, io};
 
+use async_async_io::write::AsyncAsyncWrite;
+use async_trait::async_trait;
 use bytes::Bytes;
 use thiserror::Error;
-use tokio::{net::TcpStream, task::JoinSet};
+use tokio::{io::AsyncWriteExt, net::TcpStream, task::JoinSet};
 
 use crate::send_buf::SendStreamBuf;
 
 pub struct Sender {
     streams: VecDeque<TcpStream>,
-    send_buf: SendStreamBuf,
 }
 
 impl Sender {
-    pub fn new(streams: Vec<TcpStream>, data: Bytes) -> Self {
-        let mut send_buf = SendStreamBuf::new(data);
-        send_buf.split_first_unsent_segment(streams.len());
+    pub fn new(streams: Vec<TcpStream>) -> Self {
         Self {
             streams: streams.into(),
-            send_buf,
         }
     }
 
-    pub async fn batch_send(&mut self) -> Result<(), SendError> {
+    pub async fn batch_send(&mut self, send_buf: &mut SendStreamBuf) -> Result<(), SendError> {
         if self.streams.is_empty() {
             return Err(SendError::NoStreamLeft);
         }
 
         let mut write_tasks: JoinSet<io::Result<_>> = JoinSet::new();
-        let segments = self.send_buf.iter_unsent_segments();
+        let segments = send_buf.iter_unsent_segments();
 
         for segment in segments {
             let mut stream = match self.streams.pop_front() {
@@ -48,7 +46,7 @@ impl Sender {
             match res {
                 Ok((sequence, stream)) => {
                     self.streams.push_back(stream);
-                    self.send_buf.mark_as_sent(sequence);
+                    send_buf.mark_as_sent(sequence);
                 }
                 Err(e) => {
                     io_errors.push(e);
@@ -61,18 +59,46 @@ impl Sender {
         Ok(())
     }
 
-    pub async fn batch_send_all(&mut self) -> Result<(), NoStreamLeft> {
+    pub async fn batch_send_all(&mut self, data: Bytes) -> Result<(), NoStreamLeft> {
+        let mut send_buf = SendStreamBuf::new(data);
+        send_buf.split_first_unsent_segment(self.streams.len());
+
         loop {
-            let res = self.batch_send().await;
+            let res = self.batch_send(&mut send_buf).await;
             match res {
                 Ok(()) => (),
                 Err(SendError::NoStreamLeft) => return Err(NoStreamLeft),
                 _ => continue,
             }
-            if self.send_buf.done() {
+            if send_buf.done() {
                 return Ok(());
             }
         }
+    }
+}
+
+#[async_trait]
+impl AsyncAsyncWrite for Sender {
+    async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let data = Bytes::from_iter(buf.iter().cloned());
+        self.batch_send_all(data)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))?;
+        Ok(buf.len())
+    }
+
+    async fn flush(&mut self) -> io::Result<()> {
+        for stream in &mut self.streams {
+            stream.flush().await?;
+        }
+        Ok(())
+    }
+
+    async fn shutdown(&mut self) -> io::Result<()> {
+        for stream in &mut self.streams {
+            stream.shutdown().await?;
+        }
+        Ok(())
     }
 }
 
