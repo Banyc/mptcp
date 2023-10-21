@@ -24,7 +24,7 @@ impl RecvStreamBuf {
 
         // Resolve key conflict
         if let Some(old_data_segment) = self.data_segments.get(&data_segment.start_sequence()) {
-            if data_segment.len() <= old_data_segment.len() {
+            if data_segment.size() <= old_data_segment.size() {
                 return;
             }
         }
@@ -84,10 +84,7 @@ mod tests {
     #[test]
     fn basic() {
         let mut buf = RecvStreamBuf::new();
-        buf.insert(DataSegment::new(
-            Sequence::new(0),
-            BytesMut::from_iter(vec![0, 1, 2]),
-        ));
+        buf.insert(DataSegment::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2])).unwrap());
         let data_segment = buf.pop_first().unwrap();
         assert_eq!(buf.next, data_segment.end_sequence());
         assert!(buf.pop_first().is_none());
@@ -96,18 +93,14 @@ mod tests {
     #[test]
     fn remove_stale_data() {
         let mut buf = RecvStreamBuf::new();
-        buf.insert(DataSegment::new(
-            Sequence::new(0),
-            BytesMut::from_iter(vec![0, 1, 2]),
-        ));
+        buf.insert(DataSegment::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2])).unwrap());
         let _ = buf.pop_first().unwrap();
-        buf.insert(DataSegment::new(
-            Sequence::new(0),
-            BytesMut::from_iter(vec![0, 1, 2, 3, 4]),
-        ));
+        buf.insert(
+            DataSegment::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2, 3, 4])).unwrap(),
+        );
         let data_segment = buf.pop_first().unwrap();
         assert_eq!(data_segment.start_sequence(), Sequence::new(3));
-        assert_eq!(data_segment.len(), 2);
+        assert_eq!(data_segment.size(), 2);
         assert_eq!(buf.next, data_segment.end_sequence());
         assert!(buf.pop_first().is_none());
     }
@@ -115,14 +108,8 @@ mod tests {
     #[test]
     fn deduplicate_1() {
         let mut buf = RecvStreamBuf::new();
-        buf.insert(DataSegment::new(
-            Sequence::new(0),
-            BytesMut::from_iter(vec![0, 1, 2]),
-        ));
-        buf.insert(DataSegment::new(
-            Sequence::new(1),
-            BytesMut::from_iter(vec![1, 2]),
-        ));
+        buf.insert(DataSegment::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2])).unwrap());
+        buf.insert(DataSegment::new(Sequence::new(1), BytesMut::from_iter(vec![1, 2])).unwrap());
         let _ = buf.pop_first().unwrap();
         assert_eq!(buf.next, Sequence::new(3));
         assert!(buf.pop_first().is_none());
@@ -131,18 +118,12 @@ mod tests {
     #[test]
     fn deduplicate_2() {
         let mut buf = RecvStreamBuf::new();
-        buf.insert(DataSegment::new(
-            Sequence::new(0),
-            BytesMut::from_iter(vec![0, 1, 2]),
-        ));
-        buf.insert(DataSegment::new(
-            Sequence::new(1),
-            BytesMut::from_iter(vec![1, 2, 3]),
-        ));
+        buf.insert(DataSegment::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2])).unwrap());
+        buf.insert(DataSegment::new(Sequence::new(1), BytesMut::from_iter(vec![1, 2, 3])).unwrap());
         let _ = buf.pop_first().unwrap();
         assert_eq!(buf.next, Sequence::new(3));
         let data_segment = buf.pop_first().unwrap();
-        assert_eq!(data_segment.len(), 1);
+        assert_eq!(data_segment.size(), 1);
         assert_eq!(data_segment.start_sequence(), Sequence::new(3));
         assert_eq!(buf.next, Sequence::new(4));
         assert!(buf.pop_first().is_none());

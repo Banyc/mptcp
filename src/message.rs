@@ -7,11 +7,15 @@ pub struct DataSegment {
 }
 
 impl DataSegment {
-    pub fn new(start_sequence: Sequence, payload: BytesMut) -> Self {
-        Self {
+    pub fn new(start_sequence: Sequence, payload: BytesMut) -> Option<Self> {
+        if payload.is_empty() {
+            return None;
+        }
+
+        Some(Self {
             start_sequence,
             payload,
-        }
+        })
     }
 
     pub fn start_sequence(&self) -> Sequence {
@@ -43,12 +47,8 @@ impl DataSegment {
         self.advance(bytes)
     }
 
-    pub fn len(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.payload.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.payload.is_empty()
     }
 }
 
