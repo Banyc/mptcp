@@ -1,4 +1,7 @@
+use std::io;
+
 use bytes::{Buf, BytesMut};
+use tokio::io::{AsyncRead, AsyncReadExt};
 
 #[derive(Debug)]
 pub struct DataSegmentMut {
@@ -49,6 +52,24 @@ impl DataSegmentMut {
 
     pub fn size(&self) -> usize {
         self.payload.len()
+    }
+
+    pub async fn decode<R>(reader: &mut R) -> io::Result<Self>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let start_sequence = reader.read_u64().await?;
+        let length = reader.read_u64().await?;
+        let mut payload = BytesMut::with_capacity(length as usize);
+        reader.read_buf(&mut payload).await?;
+        Ok(Self {
+            start_sequence: Sequence::new(start_sequence),
+            payload,
+        })
+    }
+
+    pub fn payload(&self) -> &BytesMut {
+        &self.payload
     }
 }
 
