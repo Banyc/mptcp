@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, num::NonZeroUsize};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -136,6 +136,62 @@ impl DataSegment {
 pub struct Sequence(u64);
 
 impl Sequence {
+    pub fn new(number: u64) -> Self {
+        Self(number)
+    }
+
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct Init {
+    session: Session,
+    streams: NonZeroUsize,
+}
+
+impl Init {
+    pub fn new(session: Session, streams: NonZeroUsize) -> Self {
+        Self { session, streams }
+    }
+
+    pub fn session(&self) -> Session {
+        self.session
+    }
+
+    pub fn streams(&self) -> NonZeroUsize {
+        self.streams
+    }
+
+    pub async fn encode<W>(&self, writer: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        writer.write_u64(self.session.inner()).await?;
+        writer.write_u64(self.streams.get() as u64).await?;
+        Ok(())
+    }
+
+    pub async fn decode<R>(reader: &mut R) -> io::Result<Self>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let session = reader.read_u64().await?;
+        let session = Session::new(session);
+        let streams = reader.read_u64().await?;
+        let streams =
+            usize::try_from(streams).map_err(|e| io::Error::new(io::ErrorKind::Unsupported, e))?;
+        let streams = NonZeroUsize::new(streams)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "zero streams"))?;
+        Ok(Self { session, streams })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash)]
+pub struct Session(u64);
+
+impl Session {
     pub fn new(number: u64) -> Self {
         Self(number)
     }
