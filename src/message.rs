@@ -25,6 +25,10 @@ impl DataSegment {
         self.start_sequence
     }
 
+    pub fn end_sequence(&self) -> Sequence {
+        Sequence::new(self.start_sequence.inner() + self.payload.len() as u64)
+    }
+
     pub fn payload(&self) -> &Bytes {
         &self.payload
     }
@@ -37,33 +41,6 @@ impl DataSegment {
         writer.write_u64(self.payload.len() as u64).await?;
         writer.write_all(&self.payload).await?;
         Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub struct DataSegmentMut {
-    start_sequence: Sequence,
-    payload: BytesMut,
-}
-
-impl DataSegmentMut {
-    pub fn new(start_sequence: Sequence, payload: BytesMut) -> Option<Self> {
-        if payload.is_empty() {
-            return None;
-        }
-
-        Some(Self {
-            start_sequence,
-            payload,
-        })
-    }
-
-    pub fn start_sequence(&self) -> Sequence {
-        self.start_sequence
-    }
-
-    pub fn end_sequence(&self) -> Sequence {
-        Sequence::new(self.start_sequence.inner() + self.payload.len() as u64)
     }
 
     pub fn advance(mut self, bytes: usize) -> Option<Self> {
@@ -102,11 +79,7 @@ impl DataSegmentMut {
         let mut payload = BytesMut::with_capacity(length);
         payload.put_bytes(0, length);
         reader.read_exact(&mut payload[..]).await?;
-        Ok(Self::new(Sequence::new(start_sequence), payload))
-    }
-
-    pub fn payload(&self) -> &BytesMut {
-        &self.payload
+        Ok(Self::new(Sequence::new(start_sequence), payload.into()))
     }
 }
 
@@ -134,7 +107,7 @@ mod tests {
         let mut buf = vec![];
         src.encode(&mut buf).await.unwrap();
         let mut reader = io::Cursor::new(&buf[..]);
-        let dst = DataSegmentMut::decode(&mut reader).await.unwrap().unwrap();
+        let dst = DataSegment::decode(&mut reader).await.unwrap().unwrap();
         assert_eq!(src.start_sequence(), dst.start_sequence());
         assert_eq!(src.payload(), dst.payload());
     }

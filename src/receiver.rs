@@ -13,14 +13,14 @@ use tokio::{
     task::JoinSet,
 };
 
-use crate::{message::DataSegmentMut, recv_buf::RecvStreamBuf};
+use crate::{message::DataSegment, recv_buf::RecvStreamBuf};
 
 pub struct Receiver {
     recv_buf: Arc<RwLock<RecvStreamBuf>>,
     recv_buf_inserted: Arc<Notify>,
     dead_streams: Arc<Semaphore>,
     num_streams: u32,
-    leftover_data_segment: Option<DataSegmentMut>,
+    leftover_data_segment: Option<DataSegment>,
     _recv_tasks: JoinSet<()>,
 }
 
@@ -43,7 +43,7 @@ impl Receiver {
                 defer! { dead_streams.add_permits(1); };
 
                 loop {
-                    let res = DataSegmentMut::decode(&mut stream).await;
+                    let res = DataSegment::decode(&mut stream).await;
                     let data_segment = match res {
                         Ok(Some(data_segment)) => data_segment,
                         Ok(None) => continue,
@@ -75,7 +75,7 @@ impl Receiver {
             let recv_buf_inserted = self.recv_buf_inserted.notified();
             let leftover_data_segment = self.leftover_data_segment.take();
 
-            let mut handle_data_segment = |data_segment: DataSegmentMut| {
+            let mut handle_data_segment = |data_segment: DataSegment| {
                 let readable = buf.len().min(data_segment.size());
                 buf[..readable].copy_from_slice(&data_segment.payload()[..readable]);
                 self.leftover_data_segment = data_segment.advance(readable);

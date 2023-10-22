@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
-use crate::message::{DataSegmentMut, Sequence};
+use crate::message::{DataSegment, Sequence};
 
 pub struct RecvStreamBuf {
     next: Sequence,
-    data_segments: BTreeMap<Sequence, DataSegmentMut>,
+    data_segments: BTreeMap<Sequence, DataSegment>,
 }
 
 impl RecvStreamBuf {
@@ -15,7 +15,7 @@ impl RecvStreamBuf {
         }
     }
 
-    pub fn insert(&mut self, data_segment: DataSegmentMut) {
+    pub fn insert(&mut self, data_segment: DataSegment) {
         // Remove stale data
         let data_segment = match data_segment.advance_to(self.next) {
             Some(data_segment) => data_segment,
@@ -33,7 +33,7 @@ impl RecvStreamBuf {
             .insert(data_segment.start_sequence(), data_segment);
     }
 
-    pub fn pop_first(&mut self) -> Option<DataSegmentMut> {
+    pub fn pop_first(&mut self) -> Option<DataSegment> {
         let (first_key, _) = match self.data_segments.first_key_value() {
             Some(first) => first,
             None => return None,
@@ -77,16 +77,14 @@ impl Default for RecvStreamBuf {
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
+    use bytes::Bytes;
 
     use super::*;
 
     #[test]
     fn basic() {
         let mut buf = RecvStreamBuf::new();
-        buf.insert(
-            DataSegmentMut::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2])).unwrap(),
-        );
+        buf.insert(DataSegment::new(Sequence::new(0), Bytes::from_iter(vec![0, 1, 2])).unwrap());
         let data_segment = buf.pop_first().unwrap();
         assert_eq!(buf.next, data_segment.end_sequence());
         assert!(buf.pop_first().is_none());
@@ -95,9 +93,9 @@ mod tests {
     #[test]
     fn unordered() {
         let mut buf = RecvStreamBuf::new();
-        buf.insert(DataSegmentMut::new(Sequence::new(1), BytesMut::from_iter(vec![1])).unwrap());
+        buf.insert(DataSegment::new(Sequence::new(1), Bytes::from_iter(vec![1])).unwrap());
         assert!(buf.pop_first().is_none());
-        buf.insert(DataSegmentMut::new(Sequence::new(0), BytesMut::from_iter(vec![0])).unwrap());
+        buf.insert(DataSegment::new(Sequence::new(0), Bytes::from_iter(vec![0])).unwrap());
         let data_segment = buf.pop_first().unwrap();
         assert_eq!(data_segment.start_sequence(), Sequence::new(0));
         assert_eq!(buf.next, Sequence::new(1));
@@ -110,13 +108,10 @@ mod tests {
     #[test]
     fn remove_stale_data() {
         let mut buf = RecvStreamBuf::new();
-        buf.insert(
-            DataSegmentMut::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2])).unwrap(),
-        );
+        buf.insert(DataSegment::new(Sequence::new(0), Bytes::from_iter(vec![0, 1, 2])).unwrap());
         let _ = buf.pop_first().unwrap();
         buf.insert(
-            DataSegmentMut::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2, 3, 4]))
-                .unwrap(),
+            DataSegment::new(Sequence::new(0), Bytes::from_iter(vec![0, 1, 2, 3, 4])).unwrap(),
         );
         let data_segment = buf.pop_first().unwrap();
         assert_eq!(data_segment.start_sequence(), Sequence::new(3));
@@ -128,10 +123,8 @@ mod tests {
     #[test]
     fn deduplicate_1() {
         let mut buf = RecvStreamBuf::new();
-        buf.insert(
-            DataSegmentMut::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2])).unwrap(),
-        );
-        buf.insert(DataSegmentMut::new(Sequence::new(1), BytesMut::from_iter(vec![1, 2])).unwrap());
+        buf.insert(DataSegment::new(Sequence::new(0), Bytes::from_iter(vec![0, 1, 2])).unwrap());
+        buf.insert(DataSegment::new(Sequence::new(1), Bytes::from_iter(vec![1, 2])).unwrap());
         let _ = buf.pop_first().unwrap();
         assert_eq!(buf.next, Sequence::new(3));
         assert!(buf.pop_first().is_none());
@@ -140,12 +133,8 @@ mod tests {
     #[test]
     fn deduplicate_2() {
         let mut buf = RecvStreamBuf::new();
-        buf.insert(
-            DataSegmentMut::new(Sequence::new(0), BytesMut::from_iter(vec![0, 1, 2])).unwrap(),
-        );
-        buf.insert(
-            DataSegmentMut::new(Sequence::new(1), BytesMut::from_iter(vec![1, 2, 3])).unwrap(),
-        );
+        buf.insert(DataSegment::new(Sequence::new(0), Bytes::from_iter(vec![0, 1, 2])).unwrap());
+        buf.insert(DataSegment::new(Sequence::new(1), Bytes::from_iter(vec![1, 2, 3])).unwrap());
         let _ = buf.pop_first().unwrap();
         assert_eq!(buf.next, Sequence::new(3));
         let data_segment = buf.pop_first().unwrap();
