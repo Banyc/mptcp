@@ -1,6 +1,6 @@
 # Multi-path TCP
 
-## How to perform file transfers
+## How to transfer a file
 
 1. Install Rust: <https://www.rust-lang.org/tools/install>
 1. `git clone <REPO_URL>.git`
@@ -12,3 +12,26 @@
 1. On the client side, run `cargo run -r -p cli --bin client -- <STREAMS> <SERVER> <COMMAND>`
    - `<STREAMS>`: The number of streams to connect
    - `<SERVER>`: The server address
+
+## How to use MPTCP in code
+
+Server:
+
+```rust
+let mut listener = MptcpListener::bind(addr).await.unwrap();
+let stream = listener.accept().await.unwrap();
+let (mut read, mut write) = stream.into_async_io().into_split();
+let mut buf = [0; 13];
+read.read_exact(&mut buf).await.unwrap();
+write.write_all(b"Hello client!").await.unwrap();
+```
+
+Client:
+
+```rust
+let stream = MptcpStream::connect(addr, num_streams).await.unwrap();
+let (mut read, mut write) = stream.into_async_io().into_split();
+write.write_all(b"Hello server!").await.unwrap();
+let mut buf = [0; 13];
+read.read_exact(&mut buf).await.unwrap();
+```
