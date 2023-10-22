@@ -1,24 +1,21 @@
-use std::{net::SocketAddr, path::PathBuf};
+use std::net::SocketAddr;
 
-use bytes::BytesMut;
 use clap::Parser;
+use cli::FileTransferCommand;
 use mptcp::{receiver::Receiver, sender::Sender};
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
-};
+use tokio::net::TcpListener;
 
 #[derive(Debug, Parser)]
-pub struct Args {
+pub struct Cli {
     pub streams: usize,
     pub listen: SocketAddr,
-    pub output_file: PathBuf,
+    #[command(subcommand)]
+    pub sub: FileTransferCommand,
 }
 
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
+    let args = Cli::parse();
 
     let mut write_streams = vec![];
     let mut read_streams = vec![];
@@ -30,31 +27,12 @@ async fn main() {
         read_streams.push(read);
     }
 
-    let mut _async_write = Sender::new(write_streams).into_async_write();
-    let mut async_read = Receiver::new(read_streams).into_async_read();
+    let async_write = Sender::new(write_streams).into_async_write();
+    let async_read = Receiver::new(read_streams).into_async_read();
 
-    let _ = tokio::fs::remove_file(&args.output_file).await;
-    let mut file = File::options()
-        .write(true)
-        .create(true)
-        .open(&args.output_file)
-        .await
-        .unwrap();
-
-    let mut buf = BytesMut::new();
-    let mut written = 0;
-    loop {
-        buf.clear();
-
-        match async_read.read_buf(&mut buf).await {
-            Ok(n) => written += n,
-            Err(e) => {
-                println!("{e}");
-                break;
-            }
-        }
-
-        file.write_all(&buf).await.unwrap();
+    let n = args.sub.perform(async_read, async_write).await.unwrap();
+    match &args.sub {
+        FileTransferCommand::Push(_) => println!("Read {n} bytes"),
+        FileTransferCommand::Pull(_) => println!("Wrote {n} bytes"),
     }
-    println!("Wrote {written} bytes");
 }

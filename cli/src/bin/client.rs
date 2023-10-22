@@ -1,21 +1,14 @@
-use std::path::PathBuf;
-
-use bytes::BytesMut;
 use clap::Parser;
+use cli::FileTransferCommand;
 use mptcp::{receiver::Receiver, sender::Sender};
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, AsyncWriteExt, BufReader},
-    net::TcpStream,
-};
-
-const PAYLOAD_SIZE: usize = 1024;
+use tokio::net::TcpStream;
 
 #[derive(Debug, Parser)]
 pub struct Args {
     pub streams: usize,
     pub server: String,
-    pub file: PathBuf,
+    #[command(subcommand)]
+    pub file_transfer: FileTransferCommand,
 }
 
 #[tokio::main]
@@ -31,25 +24,16 @@ async fn main() {
         read_streams.push(read);
     }
 
-    let mut async_write = Sender::new(write_streams).into_async_write();
-    let mut _async_read = Receiver::new(read_streams).into_async_read();
+    let async_write = Sender::new(write_streams).into_async_write();
+    let async_read = Receiver::new(read_streams).into_async_read();
 
-    let file = File::open(&args.file).await.unwrap();
-    let mut file = BufReader::new(file);
-
-    let mut buf = BytesMut::with_capacity(args.streams * PAYLOAD_SIZE);
-    let mut read = 0;
-    loop {
-        buf.clear();
-        let n = file.read_buf(&mut buf).await.unwrap();
-        read += n;
-        if n == 0 {
-            // EOF
-            break;
-        }
-
-        async_write.write_all(&buf).await.unwrap();
+    let n = args
+        .file_transfer
+        .perform(async_read, async_write)
+        .await
+        .unwrap();
+    match &args.file_transfer {
+        FileTransferCommand::Push(_) => println!("Read {n} bytes"),
+        FileTransferCommand::Pull(_) => println!("Wrote {n} bytes"),
     }
-    async_write.flush().await.unwrap();
-    println!("Read {read} bytes");
 }
