@@ -4,8 +4,10 @@ use mptcp::{receiver::Receiver, sender::Sender};
 use tokio::net::TcpStream;
 
 #[derive(Debug, Parser)]
-pub struct Args {
+pub struct Cli {
+    /// The amount of streams to connect
     pub streams: usize,
+    /// The server address
     pub server: String,
     #[command(subcommand)]
     pub file_transfer: FileTransferCommand,
@@ -13,7 +15,7 @@ pub struct Args {
 
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
+    let args = Cli::parse();
 
     let mut write_streams = vec![];
     let mut read_streams = vec![];
