@@ -51,7 +51,16 @@ where
                 let message = Message::DataSegment(segment);
                 message.encode(&mut stream).await?;
 
-                Ok((start_sequence, stream))
+                Ok((Some(start_sequence), stream))
+            });
+        }
+
+        // Send pings for the remaining streams
+        while let Some(mut stream) = self.streams.pop_front() {
+            write_tasks.spawn(async move {
+                Message::Ping.encode(&mut stream).await?;
+
+                Ok((None, stream))
             });
         }
 
@@ -59,9 +68,12 @@ where
         while let Some(task) = write_tasks.join_next().await {
             let res = task.unwrap();
             match res {
-                Ok((sequence, stream)) => {
+                Ok((Some(sequence), stream)) => {
                     self.streams.push_back(stream);
                     send_buf.mark_as_sent(sequence);
+                }
+                Ok((None, stream)) => {
+                    self.streams.push_back(stream);
                 }
                 Err(e) => {
                     io_errors.push(e);

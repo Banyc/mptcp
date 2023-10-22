@@ -61,6 +61,7 @@ impl Receiver {
                     };
                     let data_segment = match message {
                         Message::DataSegment(data_segment) => data_segment,
+                        Message::Ping => continue,
                         Message::Shutdown => {
                             let mut last_io_error = last_io_error.lock().unwrap();
                             *last_io_error = None;

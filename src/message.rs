@@ -4,11 +4,13 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 const DATA_SEGMENT_TYPE_CODE: u8 = 0;
-const SHUTDOWN_TYPE_CODE: u8 = 1;
+const PING_TYPE_CODE: u8 = 1;
+const SHUTDOWN_TYPE_CODE: u8 = 2;
 
 #[derive(Debug)]
 pub enum Message {
     DataSegment(DataSegment),
+    Ping,
     Shutdown,
 }
 
@@ -22,6 +24,7 @@ impl Message {
                 writer.write_u8(DATA_SEGMENT_TYPE_CODE).await?;
                 data_segment.encode(writer).await?;
             }
+            Message::Ping => writer.write_u8(PING_TYPE_CODE).await?,
             Message::Shutdown => writer.write_u8(SHUTDOWN_TYPE_CODE).await?,
         }
         Ok(())
@@ -40,6 +43,7 @@ impl Message {
                 };
                 Self::DataSegment(data_segment)
             }
+            PING_TYPE_CODE => Self::Ping,
             SHUTDOWN_TYPE_CODE => Self::Shutdown,
             _ => {
                 return Err(io::Error::new(
