@@ -97,8 +97,10 @@ impl DataSegmentMut {
     {
         let start_sequence = reader.read_u64().await?;
         let length = reader.read_u64().await?;
-        let mut payload = BytesMut::with_capacity(length as usize);
-        payload.put_bytes(0, length as usize);
+        let length =
+            usize::try_from(length).map_err(|e| io::Error::new(io::ErrorKind::Unsupported, e))?;
+        let mut payload = BytesMut::with_capacity(length);
+        payload.put_bytes(0, length);
         reader.read_exact(&mut payload[..]).await?;
         Ok(Self::new(Sequence::new(start_sequence), payload))
     }
