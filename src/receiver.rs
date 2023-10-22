@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use async_async_io::read::AsyncAsyncRead;
+use async_async_io::read::{AsyncAsyncRead, PollRead};
 use async_trait::async_trait;
 use scopeguard::defer;
 use thiserror::Error;
@@ -102,6 +102,10 @@ impl Receiver {
                 () = recv_buf_inserted => (),
             }
         }
+    }
+
+    pub fn into_async_read(self) -> PollRead<Self> {
+        PollRead::new(self)
     }
 }
 

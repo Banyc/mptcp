@@ -7,7 +7,6 @@ pub mod sender;
 #[cfg(test)]
 mod tests {
 
-    use async_async_io::{read::PollRead, write::PollWrite};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     use crate::{receiver::Receiver, sender::Sender};
@@ -25,8 +24,8 @@ mod tests {
         let sender = Sender::new(send_streams);
         let receiver = Receiver::new(recv_streams);
 
-        let mut async_write = PollWrite::new(sender);
-        let mut async_read = PollRead::new(receiver);
+        let mut async_write = sender.into_async_write();
+        let mut async_read = receiver.into_async_read();
 
         let msg = b"hello world";
         async_write.write_all(msg).await.unwrap();

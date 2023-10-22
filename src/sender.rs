@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, io};
 
-use async_async_io::write::AsyncAsyncWrite;
+use async_async_io::write::{AsyncAsyncWrite, PollWrite};
 use async_trait::async_trait;
 use bytes::Bytes;
 use thiserror::Error;
@@ -80,6 +80,10 @@ where
                 return Ok(());
             }
         }
+    }
+
+    pub fn into_async_write(self) -> PollWrite<Self> {
+        PollWrite::new(self)
     }
 }
 
