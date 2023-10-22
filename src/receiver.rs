@@ -97,6 +97,7 @@ impl Receiver {
                 () = recv_buf_inserted => (),
                 res = self.dead_streams.acquire_many(self.num_streams) => {
                     let _ = res.unwrap();
+                    self.dead_streams.add_permits(self.num_streams as usize);
                     return Err(NoStreamLeft);
                 }
             }
@@ -111,9 +112,10 @@ impl Receiver {
 #[async_trait]
 impl AsyncAsyncRead for Receiver {
     async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.recv(buf)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::UnexpectedEof, e))
+        match self.recv(buf).await {
+            Ok(n) => Ok(n),
+            Err(_) => Ok(0),
+        }
     }
 }
 

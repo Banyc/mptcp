@@ -3,14 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use bytes::BytesMut;
 use clap::{Args, Subcommand};
 use tokio::{
     fs::File,
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
+    io::{AsyncRead, AsyncWrite, BufReader},
 };
-
-const PAYLOAD_SIZE: usize = 1024;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum FileTransferCommand {
@@ -34,40 +31,24 @@ impl FileTransferCommand {
 #[derive(Debug, Clone, Args)]
 pub struct PushFileArgs {
     pub source_file: PathBuf,
-    #[clap(default_value_t = PAYLOAD_SIZE)]
-    pub read_buf_size: usize,
 }
 
 impl PushFileArgs {
     pub async fn push_file(&self, async_write: impl AsyncWrite + Unpin) -> io::Result<usize> {
-        push_file(&self.source_file, async_write, self.read_buf_size).await
+        push_file(&self.source_file, async_write).await
     }
 }
 
 pub async fn push_file(
     source_file: impl AsRef<Path>,
     mut async_write: impl AsyncWrite + Unpin,
-    read_buf_size: usize,
 ) -> io::Result<usize> {
     let file = File::open(source_file).await.unwrap();
     let mut file = BufReader::new(file);
 
-    let mut buf = BytesMut::with_capacity(read_buf_size);
-    let mut read = 0;
-    loop {
-        buf.clear();
-        let n = file.read_buf(&mut buf).await.unwrap();
-        read += n;
-        if n == 0 {
-            // EOF
-            break;
-        }
+    let read = tokio::io::copy(&mut file, &mut async_write).await.unwrap();
 
-        async_write.write_all(&buf).await.unwrap();
-    }
-    async_write.flush().await.unwrap();
-
-    Ok(read)
+    Ok(usize::try_from(read).unwrap())
 }
 
 #[derive(Debug, Clone, Args)]
@@ -93,18 +74,7 @@ pub async fn pull_file(
         .await
         .unwrap();
 
-    let mut buf = BytesMut::new();
-    let mut written = 0;
-    loop {
-        buf.clear();
+    let written = tokio::io::copy(&mut async_read, &mut file).await.unwrap();
 
-        match async_read.read_buf(&mut buf).await {
-            Ok(n) => written += n,
-            Err(_) => break,
-        }
-
-        file.write_all(&buf).await.unwrap();
-    }
-
-    Ok(written)
+    Ok(usize::try_from(written).unwrap())
 }
