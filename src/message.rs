@@ -1,6 +1,6 @@
 use std::io;
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug)]
@@ -91,18 +91,16 @@ impl DataSegmentMut {
         self.payload.len()
     }
 
-    pub async fn decode<R>(reader: &mut R) -> io::Result<Self>
+    pub async fn decode<R>(reader: &mut R) -> io::Result<Option<Self>>
     where
         R: AsyncRead + Unpin,
     {
         let start_sequence = reader.read_u64().await?;
         let length = reader.read_u64().await?;
         let mut payload = BytesMut::with_capacity(length as usize);
-        reader.read_buf(&mut payload).await?;
-        Ok(Self {
-            start_sequence: Sequence::new(start_sequence),
-            payload,
-        })
+        payload.put_bytes(0, length as usize);
+        reader.read_exact(&mut payload[..]).await?;
+        Ok(Self::new(Sequence::new(start_sequence), payload))
     }
 
     pub fn payload(&self) -> &BytesMut {
@@ -134,7 +132,7 @@ mod tests {
         let mut buf = vec![];
         src.encode(&mut buf).await.unwrap();
         let mut reader = io::Cursor::new(&buf[..]);
-        let dst = DataSegmentMut::decode(&mut reader).await.unwrap();
+        let dst = DataSegmentMut::decode(&mut reader).await.unwrap().unwrap();
         assert_eq!(src.start_sequence(), dst.start_sequence());
         assert_eq!(src.payload(), dst.payload());
     }

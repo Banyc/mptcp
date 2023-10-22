@@ -45,7 +45,8 @@ impl Receiver {
                 loop {
                     let res = DataSegmentMut::decode(&mut stream).await;
                     let data_segment = match res {
-                        Ok(data_segment) => data_segment,
+                        Ok(Some(data_segment)) => data_segment,
+                        Ok(None) => continue,
                         Err(_) => break,
                     };
 
