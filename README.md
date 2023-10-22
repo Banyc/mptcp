@@ -4,8 +4,7 @@
 
 1. Install Rust: <https://www.rust-lang.org/tools/install>
 1. `git clone <REPO_URL>.git`
-1. On the server side, run `cargo run -r -p cli --bin server -- <STREAMS> <LISTEN> <COMMAND>`
-   - `<STREAMS>`: The number of streams to accept
+1. On the server side, run `cargo run -r -p cli --bin server -- <LISTEN> <COMMAND>`
    - `<LISTEN>`: The listen address
    - `<COMMAND>`: either:
      - `push <SOURCE_FILE>`: To push a file from `<SOURCE_FILE>` to the peer

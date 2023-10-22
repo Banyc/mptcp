@@ -1,12 +1,9 @@
 use clap::Parser;
 use cli::FileTransferCommand;
-use mptcp::{receiver::Receiver, sender::Sender};
-use tokio::net::TcpListener;
+use mptcp::listen::MptcpListener;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
-    /// The number of streams to accept
-    pub streams: usize,
     /// The listen address
     pub listen: String,
     #[command(subcommand)]
@@ -17,18 +14,9 @@ pub struct Cli {
 async fn main() {
     let args = Cli::parse();
 
-    let mut write_streams = vec![];
-    let mut read_streams = vec![];
-    let listener = TcpListener::bind(args.listen).await.unwrap();
-    for _ in 0..args.streams {
-        let (stream, _) = listener.accept().await.unwrap();
-        let (read, write) = stream.into_split();
-        write_streams.push(write);
-        read_streams.push(read);
-    }
-
-    let async_write = Sender::new(write_streams).into_async_write();
-    let async_read = Receiver::new(read_streams).into_async_read();
+    let mut listener = MptcpListener::bind(args.listen).await.unwrap();
+    let stream = listener.accept().await.unwrap();
+    let (async_read, async_write) = stream.into_async_io().into_split();
 
     let n = args
         .file_transfer

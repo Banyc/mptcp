@@ -1,12 +1,13 @@
+use std::num::NonZeroUsize;
+
 use clap::Parser;
 use cli::FileTransferCommand;
-use mptcp::{receiver::Receiver, sender::Sender};
-use tokio::net::TcpStream;
+use mptcp::stream::MptcpStream;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
     /// The number of streams to connect
-    pub streams: usize,
+    pub streams: NonZeroUsize,
     /// The server address
     pub server: String,
     #[command(subcommand)]
@@ -17,17 +18,10 @@ pub struct Cli {
 async fn main() {
     let args = Cli::parse();
 
-    let mut write_streams = vec![];
-    let mut read_streams = vec![];
-    for _ in 0..args.streams {
-        let stream = TcpStream::connect(&args.server).await.unwrap();
-        let (read, write) = stream.into_split();
-        write_streams.push(write);
-        read_streams.push(read);
-    }
-
-    let async_write = Sender::new(write_streams).into_async_write();
-    let async_read = Receiver::new(read_streams).into_async_read();
+    let stream = MptcpStream::connect(args.server, args.streams)
+        .await
+        .unwrap();
+    let (async_read, async_write) = stream.into_async_io().into_split();
 
     let n = args
         .file_transfer
