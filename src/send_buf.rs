@@ -7,17 +7,19 @@ use crate::message::{DataSegment, Sequence};
 pub struct SendStreamBuf {
     data: Bytes,
     unsent_segments: BTreeMap<Sequence, usize>,
+    start_sequence: Sequence,
 }
 
 impl SendStreamBuf {
-    pub fn new(data: Bytes) -> Self {
+    pub fn new(data: Bytes, start_sequence: Sequence) -> Self {
         let mut unsent = BTreeMap::new();
         if !data.is_empty() {
-            unsent.insert(Sequence::new(0), data.len());
+            unsent.insert(start_sequence, data.len());
         }
         Self {
             data,
             unsent_segments: unsent,
+            start_sequence,
         }
     }
 
@@ -55,8 +57,9 @@ impl SendStreamBuf {
 
     pub fn iter_unsent_segments(&self) -> impl Iterator<Item = DataSegment> + '_ {
         self.unsent_segments.iter().map(|(start_sequence, length)| {
-            let range =
-                start_sequence.inner() as usize..(start_sequence.inner() as usize + *length);
+            let start = start_sequence.inner() - self.start_sequence.inner();
+            let start = usize::try_from(start).unwrap();
+            let range = start..(start + *length);
             let payload = self.data.slice(range);
             DataSegment::new(*start_sequence, payload).unwrap()
         })

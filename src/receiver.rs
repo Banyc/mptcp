@@ -95,11 +95,11 @@ impl Receiver {
             }
 
             tokio::select! {
+                () = recv_buf_inserted => (),
                 res = self.no_stream_left.acquire_many(self.num_streams) => {
                     let _ = res.unwrap();
                     return Err(NoStreamLeft);
                 }
-                () = recv_buf_inserted => (),
             }
         }
     }

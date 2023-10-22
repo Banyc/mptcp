@@ -93,6 +93,21 @@ mod tests {
     }
 
     #[test]
+    fn unordered() {
+        let mut buf = RecvStreamBuf::new();
+        buf.insert(DataSegmentMut::new(Sequence::new(1), BytesMut::from_iter(vec![1])).unwrap());
+        assert!(buf.pop_first().is_none());
+        buf.insert(DataSegmentMut::new(Sequence::new(0), BytesMut::from_iter(vec![0])).unwrap());
+        let data_segment = buf.pop_first().unwrap();
+        assert_eq!(data_segment.start_sequence(), Sequence::new(0));
+        assert_eq!(buf.next, Sequence::new(1));
+        let data_segment = buf.pop_first().unwrap();
+        assert_eq!(data_segment.start_sequence(), Sequence::new(1));
+        assert_eq!(buf.next, Sequence::new(2));
+        assert!(buf.pop_first().is_none());
+    }
+
+    #[test]
     fn remove_stale_data() {
         let mut buf = RecvStreamBuf::new();
         buf.insert(

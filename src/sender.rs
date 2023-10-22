@@ -9,10 +9,11 @@ use tokio::{
     task::JoinSet,
 };
 
-use crate::send_buf::SendStreamBuf;
+use crate::{message::Sequence, send_buf::SendStreamBuf};
 
 pub struct Sender<W> {
     streams: VecDeque<W>,
+    next: Sequence,
 }
 
 impl<W> Sender<W>
@@ -22,6 +23,7 @@ where
     pub fn new(streams: Vec<W>) -> Self {
         Self {
             streams: streams.into(),
+            next: Sequence::new(0),
         }
     }
 
@@ -66,7 +68,8 @@ where
     }
 
     pub async fn batch_send_all(&mut self, data: Bytes) -> Result<(), NoStreamLeft> {
-        let mut send_buf = SendStreamBuf::new(data);
+        let data_len = data.len();
+        let mut send_buf = SendStreamBuf::new(data, self.next);
         send_buf.split_first_unsent_segment(self.streams.len());
 
         loop {
@@ -77,6 +80,7 @@ where
                 _ => continue,
             }
             if send_buf.done() {
+                self.next = Sequence::new(self.next.inner() + data_len as u64);
                 return Ok(());
             }
         }
