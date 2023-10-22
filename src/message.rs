@@ -3,6 +3,55 @@ use std::io;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+const DATA_SEGMENT_TYPE_CODE: u8 = 0;
+const SHUTDOWN_TYPE_CODE: u8 = 1;
+
+#[derive(Debug)]
+pub enum Message {
+    DataSegment(DataSegment),
+    Shutdown,
+}
+
+impl Message {
+    pub async fn encode<W>(&self, writer: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        match self {
+            Message::DataSegment(data_segment) => {
+                writer.write_u8(DATA_SEGMENT_TYPE_CODE).await?;
+                data_segment.encode(writer).await?;
+            }
+            Message::Shutdown => writer.write_u8(SHUTDOWN_TYPE_CODE).await?,
+        }
+        Ok(())
+    }
+
+    pub async fn decode<R>(reader: &mut R) -> io::Result<Option<Self>>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let type_code = reader.read_u8().await?;
+        let this = match type_code {
+            DATA_SEGMENT_TYPE_CODE => {
+                let data_segment = match DataSegment::decode(reader).await? {
+                    Some(data_segment) => data_segment,
+                    None => return Ok(None),
+                };
+                Self::DataSegment(data_segment)
+            }
+            SHUTDOWN_TYPE_CODE => Self::Shutdown,
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unknown type code: {type_code}"),
+                ))
+            }
+        };
+        Ok(Some(this))
+    }
+}
+
 #[derive(Debug)]
 pub struct DataSegment {
     start_sequence: Sequence,

@@ -1,6 +1,6 @@
 use std::{
     io,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use async_async_io::read::{AsyncAsyncRead, PollRead};
@@ -13,7 +13,10 @@ use tokio::{
     task::JoinSet,
 };
 
-use crate::{message::DataSegment, recv_buf::RecvStreamBuf};
+use crate::{
+    message::{DataSegment, Message},
+    recv_buf::RecvStreamBuf,
+};
 
 pub struct Receiver {
     recv_buf: Arc<RwLock<RecvStreamBuf>>,
@@ -21,6 +24,7 @@ pub struct Receiver {
     dead_streams: Arc<Semaphore>,
     num_streams: u32,
     leftover_data_segment: Option<DataSegment>,
+    last_io_error: Arc<Mutex<Option<io::Error>>>,
     _recv_tasks: JoinSet<()>,
 }
 
@@ -33,21 +37,35 @@ impl Receiver {
         let recv_buf_inserted = Arc::new(Notify::new());
         let dead_streams = Arc::new(Semaphore::new(0));
         let num_streams = u32::try_from(streams.len()).unwrap();
+        let last_io_error = Arc::new(Mutex::new(None));
 
         let mut recv_tasks = JoinSet::new();
         for mut stream in streams {
             let recv_buf_inserted = recv_buf_inserted.clone();
             let recv_buf = recv_buf.clone();
             let dead_streams = dead_streams.clone();
+            let last_io_error = last_io_error.clone();
             recv_tasks.spawn(async move {
                 defer! { dead_streams.add_permits(1); };
 
                 loop {
-                    let res = DataSegment::decode(&mut stream).await;
-                    let data_segment = match res {
-                        Ok(Some(data_segment)) => data_segment,
+                    let res = Message::decode(&mut stream).await;
+                    let message = match res {
+                        Ok(Some(message)) => message,
                         Ok(None) => continue,
-                        Err(_) => break,
+                        Err(e) => {
+                            let mut last_io_error = last_io_error.lock().unwrap();
+                            *last_io_error = Some(e);
+                            break;
+                        }
+                    };
+                    let data_segment = match message {
+                        Message::DataSegment(data_segment) => data_segment,
+                        Message::Shutdown => {
+                            let mut last_io_error = last_io_error.lock().unwrap();
+                            *last_io_error = None;
+                            break;
+                        }
                     };
 
                     {
@@ -66,11 +84,12 @@ impl Receiver {
             dead_streams,
             num_streams,
             leftover_data_segment: None,
+            last_io_error,
             _recv_tasks: recv_tasks,
         }
     }
 
-    pub async fn recv(&mut self, buf: &mut [u8]) -> Result<usize, NoStreamLeft> {
+    pub async fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
             let recv_buf_inserted = self.recv_buf_inserted.notified();
             let leftover_data_segment = self.leftover_data_segment.take();
@@ -98,7 +117,11 @@ impl Receiver {
                 res = self.dead_streams.acquire_many(self.num_streams) => {
                     let _ = res.unwrap();
                     self.dead_streams.add_permits(self.num_streams as usize);
-                    return Err(NoStreamLeft);
+                    let mut last_io_error = self.last_io_error.lock().unwrap();
+                    match last_io_error.take() {
+                        Some(e) => return Err(e),
+                        None => return Ok(0),
+                    }
                 }
             }
         }

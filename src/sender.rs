@@ -9,8 +9,12 @@ use tokio::{
     task::JoinSet,
 };
 
-use crate::{message::Sequence, send_buf::SendStreamBuf};
+use crate::{
+    message::{Message, Sequence},
+    send_buf::SendStreamBuf,
+};
 
+/// You will have to explicitly call `Self::shutdown` before the drop
 pub struct Sender<W> {
     streams: VecDeque<W>,
     next: Sequence,
@@ -42,9 +46,12 @@ where
             };
 
             write_tasks.spawn(async move {
-                segment.encode(&mut stream).await?;
+                let start_sequence = segment.start_sequence();
 
-                Ok((segment.start_sequence(), stream))
+                let message = Message::DataSegment(segment);
+                message.encode(&mut stream).await?;
+
+                Ok((start_sequence, stream))
             });
         }
 
@@ -89,6 +96,15 @@ where
     pub fn into_async_write(self) -> PollWrite<Self> {
         PollWrite::new(self)
     }
+
+    pub async fn shutdown(&mut self) -> io::Result<()> {
+        for stream in &mut self.streams {
+            let message = Message::Shutdown;
+            message.encode(stream).await?;
+            stream.shutdown().await?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -115,10 +131,7 @@ where
     }
 
     async fn shutdown(&mut self) -> io::Result<()> {
-        for stream in &mut self.streams {
-            stream.shutdown().await?;
-        }
-        Ok(())
+        Self::shutdown(self).await
     }
 }
 
