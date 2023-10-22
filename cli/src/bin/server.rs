@@ -5,7 +5,7 @@ use tokio::net::TcpListener;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
-    /// The amount of streams to accept
+    /// The number of streams to accept
     pub streams: usize,
     /// The listen address
     pub listen: String,

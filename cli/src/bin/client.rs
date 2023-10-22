@@ -5,7 +5,7 @@ use tokio::net::TcpStream;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
-    /// The amount of streams to connect
+    /// The number of streams to connect
     pub streams: usize,
     /// The server address
     pub server: String,
