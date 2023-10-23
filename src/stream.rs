@@ -1,7 +1,10 @@
 use std::{io, num::NonZeroUsize};
 
 use async_async_io::PollIo;
-use tokio::net::{tcp, TcpStream, ToSocketAddrs};
+use tokio::{
+    net::{tcp, TcpStream, ToSocketAddrs},
+    task::JoinSet,
+};
 
 use crate::{
     message::{Init, Session},
@@ -31,16 +34,29 @@ impl MptcpStream {
         )
     }
 
-    pub async fn connect(addr: impl ToSocketAddrs, streams: NonZeroUsize) -> io::Result<Self> {
+    pub async fn connect(
+        addr: impl ToSocketAddrs + Clone + Send + Sync + 'static,
+        streams: NonZeroUsize,
+    ) -> io::Result<Self> {
         let mut read_streams = vec![];
         let mut write_streams = vec![];
         let session: u64 = rand::random();
         let session = Session::new(session);
         let init = Init::new(session, streams);
 
+        let mut connections = JoinSet::new();
         for _ in 0..streams.get() {
-            let mut stream = TcpStream::connect(&addr).await.unwrap();
-            init.encode(&mut stream).await?;
+            let addr = addr.clone();
+            let init = init.clone();
+            connections.spawn(async move {
+                let mut stream = TcpStream::connect(&addr).await?;
+                init.encode(&mut stream).await?;
+                Ok::<_, io::Error>(stream)
+            });
+        }
+
+        while let Some(task) = connections.join_next().await {
+            let stream = task.unwrap()?;
             let (read, write) = stream.into_split();
             read_streams.push(read);
             write_streams.push(write);

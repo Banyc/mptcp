@@ -149,7 +149,7 @@ impl Sequence {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Init {
     session: Session,
     streams: NonZeroUsize,
