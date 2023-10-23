@@ -110,12 +110,16 @@ where
     }
 
     pub async fn shutdown(&mut self) -> io::Result<()> {
+        let mut last_io_error = None;
         for stream in &mut self.streams {
-            let message = Message::Shutdown;
-            message.encode(stream).await?;
-            stream.shutdown().await?;
+            if let Err(e) = shutdown_stream(stream).await {
+                last_io_error = Some(e);
+            }
         }
-        Ok(())
+        match last_io_error {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 }
 
@@ -145,6 +149,16 @@ where
     async fn shutdown(&mut self) -> io::Result<()> {
         Self::shutdown(self).await
     }
+}
+
+async fn shutdown_stream<W>(stream: &mut W) -> io::Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    let message = Message::Shutdown;
+    message.encode(stream).await?;
+    stream.shutdown().await?;
+    Ok(())
 }
 
 #[derive(Debug, Error)]
