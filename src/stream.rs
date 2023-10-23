@@ -1,7 +1,8 @@
-use std::{io, num::NonZeroUsize};
+use std::{io, num::NonZeroUsize, pin::Pin};
 
-use async_async_io::PollIo;
+use async_async_io::{read::PollRead, write::PollWrite, PollIo};
 use tokio::{
+    io::{AsyncRead, AsyncWrite},
     net::{tcp, TcpStream, ToSocketAddrs},
     task::JoinSet,
 };
@@ -13,8 +14,7 @@ use crate::{
 };
 
 pub struct MptcpStream {
-    sender: Sender<tcp::OwnedWriteHalf>,
-    receiver: Receiver,
+    poll: PollIo<Receiver, Sender<tcp::OwnedWriteHalf>>,
 }
 
 impl MptcpStream {
@@ -24,18 +24,8 @@ impl MptcpStream {
     ) -> Self {
         let sender = Sender::new(write_streams);
         let receiver = Receiver::new(read_streams);
-        Self { sender, receiver }
-    }
-
-    pub fn into_async_io(self) -> PollIo<Receiver, Sender<tcp::OwnedWriteHalf>> {
-        PollIo::new(
-            self.receiver.into_async_read(),
-            self.sender.into_async_write(),
-        )
-    }
-
-    pub fn into_split(self) -> (Receiver, Sender<tcp::OwnedWriteHalf>) {
-        (self.receiver, self.sender)
+        let poll = PollIo::new(PollRead::new(receiver), PollWrite::new(sender));
+        Self { poll }
     }
 
     pub async fn connect(
@@ -67,5 +57,151 @@ impl MptcpStream {
         }
 
         Ok(Self::new(read_streams, write_streams))
+    }
+
+    pub fn into_split(self) -> (OwnedReadHalf, OwnedWriteHalf) {
+        let (read, write) = self.poll.into_split();
+        let read = OwnedReadHalf { poll: read };
+        let write = OwnedWriteHalf { poll: write };
+        (read, write)
+    }
+
+    pub fn split(&mut self) -> (ReadHalf, WriteHalf) {
+        let (read, write) = self.poll.split_mut();
+        let read = ReadHalf { poll: read };
+        let write = WriteHalf { poll: write };
+        (read, write)
+    }
+}
+
+impl AsyncRead for MptcpStream {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        Pin::new(&mut self.poll).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for MptcpStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.poll).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.poll).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.poll).poll_shutdown(cx)
+    }
+}
+
+pub struct OwnedReadHalf {
+    poll: PollRead<Receiver>,
+}
+
+impl OwnedReadHalf {
+    pub fn reunite(self, write: OwnedWriteHalf) -> MptcpStream {
+        let poll = PollIo::new(self.poll, write.poll);
+        MptcpStream { poll }
+    }
+}
+
+impl AsyncRead for OwnedReadHalf {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        Pin::new(&mut self.poll).poll_read(cx, buf)
+    }
+}
+
+pub struct OwnedWriteHalf {
+    poll: PollWrite<Sender<tcp::OwnedWriteHalf>>,
+}
+
+impl OwnedWriteHalf {
+    pub fn reunite(self, read: OwnedReadHalf) -> MptcpStream {
+        let poll = PollIo::new(read.poll, self.poll);
+        MptcpStream { poll }
+    }
+}
+
+impl AsyncWrite for OwnedWriteHalf {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.poll).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.poll).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.poll).poll_shutdown(cx)
+    }
+}
+
+pub struct ReadHalf<'poll> {
+    poll: &'poll mut PollRead<Receiver>,
+}
+
+impl AsyncRead for ReadHalf<'_> {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        Pin::new(&mut self.poll).poll_read(cx, buf)
+    }
+}
+
+pub struct WriteHalf<'poll> {
+    poll: &'poll mut PollWrite<Sender<tcp::OwnedWriteHalf>>,
+}
+
+impl AsyncWrite for WriteHalf<'_> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.poll).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.poll).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.poll).poll_shutdown(cx)
     }
 }

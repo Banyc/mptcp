@@ -21,7 +21,7 @@ Server:
 ```rust
 let listener = MptcpListener::bind(addr, max_session_streams).await.unwrap();
 let stream = listener.accept().await.unwrap();
-let (mut read, mut write) = stream.into_async_io().into_split();
+let (mut read, mut write) = stream.into_split();
 let mut buf = [0; 13];
 read.read_exact(&mut buf).await.unwrap();
 write.write_all(b"Hello client!").await.unwrap();
@@ -31,7 +31,7 @@ Client:
 
 ```rust
 let stream = MptcpStream::connect(addr, num_streams).await.unwrap();
-let (mut read, mut write) = stream.into_async_io().into_split();
+let (mut read, mut write) = stream.into_split();
 write.write_all(b"Hello server!").await.unwrap();
 let mut buf = [0; 13];
 read.read_exact(&mut buf).await.unwrap();

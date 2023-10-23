@@ -7,7 +7,7 @@ pub mod sender;
 pub mod stream;
 
 pub use listen::MptcpListener;
-pub use stream::MptcpStream;
+pub use stream::{MptcpStream, OwnedReadHalf, OwnedWriteHalf, ReadHalf, WriteHalf};
 
 #[cfg(test)]
 mod tests {

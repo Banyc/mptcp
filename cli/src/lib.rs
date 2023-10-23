@@ -18,12 +18,12 @@ pub enum FileTransferCommand {
 impl FileTransferCommand {
     pub async fn perform(
         &self,
-        async_read: impl AsyncRead + Unpin,
-        async_write: impl AsyncWrite + Unpin,
+        read: impl AsyncRead + Unpin,
+        write: impl AsyncWrite + Unpin,
     ) -> io::Result<usize> {
         match self {
-            FileTransferCommand::Push(args) => args.push_file(async_write).await,
-            FileTransferCommand::Pull(args) => args.pull_file(async_read).await,
+            FileTransferCommand::Push(args) => args.push_file(write).await,
+            FileTransferCommand::Pull(args) => args.pull_file(read).await,
         }
     }
 }
@@ -34,19 +34,19 @@ pub struct PushFileArgs {
 }
 
 impl PushFileArgs {
-    pub async fn push_file(&self, async_write: impl AsyncWrite + Unpin) -> io::Result<usize> {
-        push_file(&self.source_file, async_write).await
+    pub async fn push_file(&self, write: impl AsyncWrite + Unpin) -> io::Result<usize> {
+        push_file(&self.source_file, write).await
     }
 }
 
 pub async fn push_file(
     source_file: impl AsRef<Path>,
-    mut async_write: impl AsyncWrite + Unpin,
+    mut write: impl AsyncWrite + Unpin,
 ) -> io::Result<usize> {
     let file = File::open(source_file).await.unwrap();
     let mut file = BufReader::new(file);
 
-    let read = tokio::io::copy(&mut file, &mut async_write).await.unwrap();
+    let read = tokio::io::copy(&mut file, &mut write).await.unwrap();
 
     Ok(usize::try_from(read).unwrap())
 }
@@ -57,14 +57,14 @@ pub struct PullFileArgs {
 }
 
 impl PullFileArgs {
-    pub async fn pull_file(&self, async_read: impl AsyncRead + Unpin) -> io::Result<usize> {
-        pull_file(&self.output_file, async_read).await
+    pub async fn pull_file(&self, read: impl AsyncRead + Unpin) -> io::Result<usize> {
+        pull_file(&self.output_file, read).await
     }
 }
 
 pub async fn pull_file(
     output_file: impl AsRef<Path>,
-    mut async_read: impl AsyncRead + Unpin,
+    mut read: impl AsyncRead + Unpin,
 ) -> io::Result<usize> {
     let _ = tokio::fs::remove_file(&output_file).await;
     let mut file = File::options()
@@ -74,7 +74,7 @@ pub async fn pull_file(
         .await
         .unwrap();
 
-    let written = tokio::io::copy(&mut async_read, &mut file).await.unwrap();
+    let written = tokio::io::copy(&mut read, &mut file).await.unwrap();
 
     Ok(usize::try_from(written).unwrap())
 }

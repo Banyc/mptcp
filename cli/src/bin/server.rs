@@ -22,13 +22,9 @@ async fn main() {
         .await
         .unwrap();
     let stream = listener.accept().await.unwrap();
-    let (async_read, async_write) = stream.into_async_io().into_split();
+    let (read, write) = stream.into_split();
 
-    let n = args
-        .file_transfer
-        .perform(async_read, async_write)
-        .await
-        .unwrap();
+    let n = args.file_transfer.perform(read, write).await.unwrap();
     match &args.file_transfer {
         FileTransferCommand::Push(_) => println!("Read {n} bytes"),
         FileTransferCommand::Pull(_) => println!("Wrote {n} bytes"),
