@@ -34,6 +34,10 @@ impl MptcpStream {
         )
     }
 
+    pub fn into_split(self) -> (Receiver, Sender<tcp::OwnedWriteHalf>) {
+        (self.receiver, self.sender)
+    }
+
     pub async fn connect(
         addr: impl ToSocketAddrs + Clone + Send + Sync + 'static,
         streams: NonZeroUsize,
