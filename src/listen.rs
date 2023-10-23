@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     io,
+    net::SocketAddr,
     num::NonZeroUsize,
     sync::{Arc, RwLock},
     time::{Duration, Instant},
@@ -86,6 +87,10 @@ impl MptcpListener {
                 };
             }
         }
+    }
+
+    pub fn listen_addr(&self) -> io::Result<SocketAddr> {
+        self.listener.local_addr()
     }
 }
 
