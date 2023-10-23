@@ -90,7 +90,7 @@ impl MptcpListener {
         }
     }
 
-    pub fn listen_addr(&self) -> io::Result<SocketAddr> {
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.listener.local_addr()
     }
 }
