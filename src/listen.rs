@@ -56,7 +56,7 @@ impl MptcpListener {
         })
     }
 
-    pub async fn accept(&mut self) -> io::Result<MptcpStream> {
+    pub async fn accept(&self) -> io::Result<MptcpStream> {
         loop {
             let (mut stream, _) = self.listener.accept().await?;
             let init = Init::decode(&mut stream).await?;
