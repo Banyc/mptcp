@@ -18,6 +18,7 @@ use crate::{
 };
 
 const BACKLOG_TIMEOUT: Duration = Duration::from_secs(60);
+const INIT_TIMEOUT: Duration = Duration::from_secs(1);
 const BACKLOG_MAX: usize = 1024;
 
 #[derive(Debug)]
@@ -61,7 +62,7 @@ impl MptcpListener {
     pub async fn accept(&self) -> io::Result<MptcpStream> {
         loop {
             let (mut stream, _) = self.listener.accept().await?;
-            let init = Init::decode(&mut stream).await?;
+            let init = tokio::time::timeout(INIT_TIMEOUT, Init::decode(&mut stream)).await??;
             if init.streams() > self.max_session_streams {
                 continue;
             }
