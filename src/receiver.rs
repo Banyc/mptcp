@@ -18,6 +18,7 @@ use crate::{
     recv_buf::RecvStreamBuf,
 };
 
+#[derive(Debug)]
 pub struct Receiver {
     recv_buf: Arc<RwLock<RecvStreamBuf>>,
     recv_buf_inserted: Arc<Notify>,

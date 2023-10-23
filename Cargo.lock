@@ -78,9 +78,9 @@ dependencies = [
 
 [[package]]
 name = "async_async_io"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66be5ffe95b55554e3b3c5e65e272a57953cda48a0364d2a4bc20b0826e91f7a"
+checksum = "f767e53004e8162f13f0f3869c14ff13620df3de93ce57f403e81a595c730414"
 dependencies = [
  "async-trait",
  "futures-core",

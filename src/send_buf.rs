@@ -4,6 +4,7 @@ use bytes::Bytes;
 
 use crate::message::{DataSegment, Sequence};
 
+#[derive(Debug)]
 pub struct SendStreamBuf {
     data: Bytes,
     unsent_segments: BTreeMap<Sequence, usize>,

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::message::{DataSegment, Sequence};
 
+#[derive(Debug)]
 pub struct RecvStreamBuf {
     next: Sequence,
     data_segments: BTreeMap<Sequence, DataSegment>,

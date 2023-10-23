@@ -13,6 +13,7 @@ use crate::{
     sender::Sender,
 };
 
+#[derive(Debug)]
 pub struct MptcpStream {
     poll: PollIo<Receiver, Sender<tcp::OwnedWriteHalf>>,
 }
@@ -108,6 +109,7 @@ impl AsyncWrite for MptcpStream {
     }
 }
 
+#[derive(Debug)]
 pub struct OwnedReadHalf {
     poll: PollRead<Receiver>,
 }
@@ -129,6 +131,7 @@ impl AsyncRead for OwnedReadHalf {
     }
 }
 
+#[derive(Debug)]
 pub struct OwnedWriteHalf {
     poll: PollWrite<Sender<tcp::OwnedWriteHalf>>,
 }
@@ -164,6 +167,7 @@ impl AsyncWrite for OwnedWriteHalf {
     }
 }
 
+#[derive(Debug)]
 pub struct ReadHalf<'poll> {
     poll: &'poll mut PollRead<Receiver>,
 }
@@ -178,6 +182,7 @@ impl AsyncRead for ReadHalf<'_> {
     }
 }
 
+#[derive(Debug)]
 pub struct WriteHalf<'poll> {
     poll: &'poll mut PollWrite<Sender<tcp::OwnedWriteHalf>>,
 }

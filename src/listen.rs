@@ -20,6 +20,7 @@ use crate::{
 const BACKLOG_TIMEOUT: Duration = Duration::from_secs(60);
 const BACKLOG_MAX: usize = 1024;
 
+#[derive(Debug)]
 pub struct MptcpListener {
     listener: TcpListener,
     backlog: Arc<RwLock<HashMap<Session, QueuedConnection>>>,
@@ -94,6 +95,7 @@ impl MptcpListener {
     }
 }
 
+#[derive(Debug)]
 struct QueuedConnection {
     read_streams: Vec<tcp::OwnedReadHalf>,
     write_streams: Vec<tcp::OwnedWriteHalf>,
@@ -128,6 +130,7 @@ impl QueuedConnection {
     }
 }
 
+#[derive(Debug)]
 enum QueuedConnectionPushResult {
     QueuedConnection(QueuedConnection),
     Stream(MptcpStream),

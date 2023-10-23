@@ -15,6 +15,7 @@ use crate::{
 };
 
 /// You will have to explicitly call `Self::shutdown` before the drop
+#[derive(Debug)]
 pub struct Sender<W> {
     streams: VecDeque<W>,
     next: Sequence,
