@@ -6,7 +6,7 @@ use mptcp::stream::MptcpStream;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
-    /// The number of streams to connect
+    /// The number of TCP streams to connect
     pub streams: NonZeroUsize,
     /// The server address
     pub server: String,

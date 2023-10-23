@@ -23,11 +23,15 @@ pub struct MptcpListener {
     listener: TcpListener,
     backlog: Arc<RwLock<HashMap<Session, QueuedConnection>>>,
     backlog_max: NonZeroUsize,
+    max_session_streams: NonZeroUsize,
     _backlog_cleanup_task: JoinSet<()>,
 }
 
 impl MptcpListener {
-    pub async fn bind(addr: impl ToSocketAddrs) -> io::Result<Self> {
+    pub async fn bind(
+        addr: impl ToSocketAddrs,
+        max_session_streams: NonZeroUsize,
+    ) -> io::Result<Self> {
         let listener = TcpListener::bind(addr).await?;
         let backlog = Arc::new(RwLock::new(HashMap::new()));
         let mut backlog_cleanup_task = JoinSet::new();
@@ -47,6 +51,7 @@ impl MptcpListener {
             listener,
             backlog,
             backlog_max: NonZeroUsize::new(BACKLOG_MAX).unwrap(),
+            max_session_streams,
             _backlog_cleanup_task: backlog_cleanup_task,
         })
     }
@@ -55,6 +60,9 @@ impl MptcpListener {
         loop {
             let (mut stream, _) = self.listener.accept().await?;
             let init = Init::decode(&mut stream).await?;
+            if init.streams() > self.max_session_streams {
+                continue;
+            }
             loop {
                 let mut backlog = self.backlog.write().unwrap();
                 match backlog.remove(&init.session()) {
