@@ -6,6 +6,9 @@ pub mod send_buf;
 pub mod sender;
 pub mod stream;
 
+pub use listen::MptcpListener;
+pub use stream::MptcpStream;
+
 #[cfg(test)]
 mod tests {
 
