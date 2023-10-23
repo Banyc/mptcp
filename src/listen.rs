@@ -14,7 +14,7 @@ use tokio::{
 
 use crate::{
     message::{Init, Session},
-    stream::MptcpStream,
+    stream::{MptcpStream, SingleAddress},
 };
 
 const BACKLOG_TIMEOUT: Duration = Duration::from_secs(60);
@@ -114,11 +114,12 @@ impl QueuedConnection {
     }
 
     pub fn push(mut self, stream: TcpStream) -> QueuedConnectionPushResult {
+        let addr = SingleAddress::Local(stream.local_addr().unwrap());
         let (read, write) = stream.into_split();
         self.read_streams.push(read);
         self.write_streams.push(write);
         if self.read_streams.len() == self.max.get() {
-            let stream = MptcpStream::new(self.read_streams, self.write_streams);
+            let stream = MptcpStream::new(self.read_streams, self.write_streams, addr);
             return QueuedConnectionPushResult::Stream(stream);
         }
         self.last_update = Instant::now();
