@@ -4,6 +4,8 @@ use bytes::Bytes;
 
 use crate::message::{DataSegment, Sequence};
 
+const MINIMUM_PAYLOAD_SIZE: usize = 1024;
+
 #[derive(Debug)]
 pub struct SendStreamBuf {
     data: Bytes,
@@ -38,7 +40,7 @@ impl SendStreamBuf {
             None => return,
         };
 
-        let segment_bytes = length.div_ceil(segments);
+        let segment_bytes = length.div_ceil(segments).max(MINIMUM_PAYLOAD_SIZE);
         if segment_bytes == 0 {
             return;
         }
