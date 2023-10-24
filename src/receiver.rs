@@ -93,7 +93,6 @@ impl Receiver {
 
     pub async fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         loop {
-            let recv_buf_inserted = self.recv_buf_inserted.notified();
             let leftover_data_segment = self.leftover_data_segment.take();
 
             let mut handle_data_segment = |data_segment: DataSegment| {
@@ -107,6 +106,8 @@ impl Receiver {
                 return handle_data_segment(data_segment);
             }
 
+            // Checkout receive buffer
+            let recv_buf_inserted = self.recv_buf_inserted.notified();
             {
                 let mut recv_buf = self.recv_buf.write().unwrap();
                 if let Some(data_segment) = recv_buf.pop_first() {

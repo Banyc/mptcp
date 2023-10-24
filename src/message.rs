@@ -27,6 +27,7 @@ impl Message {
             Message::Ping => writer.write_u8(PING_TYPE_CODE).await?,
             Message::Shutdown => writer.write_u8(SHUTDOWN_TYPE_CODE).await?,
         }
+        writer.flush().await?;
         Ok(())
     }
 
@@ -174,6 +175,7 @@ impl Init {
     {
         writer.write_u64(self.session.inner()).await?;
         writer.write_u64(self.streams.get() as u64).await?;
+        writer.flush().await?;
         Ok(())
     }
 
