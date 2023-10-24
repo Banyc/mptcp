@@ -1,17 +1,25 @@
 use std::{
     io,
     sync::{Arc, Mutex, RwLock},
+    time::Duration,
 };
 
 use async_async_io::read::{AsyncAsyncRead, PollRead};
 use async_trait::async_trait;
 use thiserror::Error;
-use tokio::{io::AsyncRead, sync::Notify, task::JoinSet};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    select,
+    sync::{mpsc, Notify},
+    task::JoinSet,
+};
 
 use crate::{
     message::{DataSegment, Message},
     recv_buf::RecvStreamBuf,
 };
+
+const LINGER: Duration = Duration::from_secs(10);
 
 #[derive(Debug)]
 pub struct Receiver {
@@ -20,6 +28,7 @@ pub struct Receiver {
     leftover_data_segment: Option<DataSegment>,
     last_io_error: Arc<Mutex<Option<io::Error>>>,
     recv_tasks: JoinSet<()>,
+    _closed: mpsc::Receiver<()>,
 }
 
 impl Receiver {
@@ -30,15 +39,46 @@ impl Receiver {
         let recv_buf = Arc::new(RwLock::new(RecvStreamBuf::new()));
         let recv_buf_inserted = Arc::new(Notify::new());
         let last_io_error = Arc::new(Mutex::new(None));
+        let (closed_tx, closed_rx) = mpsc::channel(1);
 
         let mut recv_tasks = JoinSet::new();
         for mut stream in streams {
             let recv_buf_inserted = recv_buf_inserted.clone();
             let recv_buf = recv_buf.clone();
             let last_io_error = last_io_error.clone();
+            let closed_tx = closed_tx.clone();
             recv_tasks.spawn(async move {
                 loop {
-                    let res = Message::decode(&mut stream).await;
+                    let res = select! {
+                        () = closed_tx.closed() => {
+                            // Prevent triggering TCP RST from our side
+                            let mut drain_task = JoinSet::new();
+                            drain_task.spawn(async move {
+                                let mut buf = [0; 1];
+                                loop {
+                                    let n = stream.read(&mut buf).await?;
+                                    if n == 0 {
+                                        break;
+                                    }
+                                }
+                                Ok::<_, io::Error>(())
+                            });
+
+                            tokio::select! {
+                                res = drain_task.join_next() => {
+                                    if let Some(task) = res {
+                                        // In case the task panicked
+                                        let _ = task.unwrap();
+                                    }
+                                }
+                                () = tokio::time::sleep(LINGER) => (),
+                            }
+                            break;
+                        }
+                        // `Message::decode` is NOT cancel safe but it's OK if it will not be called again
+                        res = Message::decode(&mut stream) => res,
+                    };
+
                     let message = match res {
                         Ok(Some(message)) => message,
                         Ok(None) => continue,
@@ -74,6 +114,7 @@ impl Receiver {
             leftover_data_segment: None,
             last_io_error,
             recv_tasks,
+            _closed: closed_rx,
         }
     }
 
@@ -121,6 +162,13 @@ impl Receiver {
 
     pub fn into_async_read(self) -> PollRead<Self> {
         PollRead::new(self)
+    }
+}
+
+impl Drop for Receiver {
+    fn drop(&mut self) {
+        // The drop of `self.closed` will signal receive tasks to end later
+        self.recv_tasks.detach_all();
     }
 }
 
