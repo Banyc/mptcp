@@ -173,8 +173,16 @@ impl Init {
     where
         W: AsyncWrite + Unpin,
     {
-        writer.write_u64(self.session.inner()).await?;
-        writer.write_u64(self.streams.get() as u64).await?;
+        let mut buf = [0_u8; 8 * 2];
+        let mut buf_writer = io::Cursor::new(&mut buf[..]);
+
+        buf_writer.write_u64(self.session.inner()).await.unwrap();
+        buf_writer
+            .write_u64(self.streams.get() as u64)
+            .await
+            .unwrap();
+
+        writer.write_all(&buf).await?;
         writer.flush().await?;
         Ok(())
     }
@@ -183,9 +191,13 @@ impl Init {
     where
         R: AsyncRead + Unpin,
     {
-        let session = reader.read_u64().await?;
+        let mut buf = [0_u8; 8 * 2];
+        reader.read_exact(&mut buf).await?;
+        let mut buf_reader = io::Cursor::new(&buf[..]);
+
+        let session = buf_reader.read_u64().await.unwrap();
         let session = Session::new(session);
-        let streams = reader.read_u64().await?;
+        let streams = buf_reader.read_u64().await.unwrap();
         let streams =
             usize::try_from(streams).map_err(|e| io::Error::new(io::ErrorKind::Unsupported, e))?;
         let streams = NonZeroUsize::new(streams)
