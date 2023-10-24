@@ -5,13 +5,8 @@ use std::{
 
 use async_async_io::read::{AsyncAsyncRead, PollRead};
 use async_trait::async_trait;
-use scopeguard::defer;
 use thiserror::Error;
-use tokio::{
-    io::AsyncRead,
-    sync::{Notify, Semaphore},
-    task::JoinSet,
-};
+use tokio::{io::AsyncRead, sync::Notify, task::JoinSet};
 
 use crate::{
     message::{DataSegment, Message},
@@ -22,11 +17,9 @@ use crate::{
 pub struct Receiver {
     recv_buf: Arc<RwLock<RecvStreamBuf>>,
     recv_buf_inserted: Arc<Notify>,
-    dead_streams: Arc<Semaphore>,
-    num_streams: u32,
     leftover_data_segment: Option<DataSegment>,
     last_io_error: Arc<Mutex<Option<io::Error>>>,
-    _recv_tasks: JoinSet<()>,
+    recv_tasks: JoinSet<()>,
 }
 
 impl Receiver {
@@ -36,19 +29,14 @@ impl Receiver {
     {
         let recv_buf = Arc::new(RwLock::new(RecvStreamBuf::new()));
         let recv_buf_inserted = Arc::new(Notify::new());
-        let dead_streams = Arc::new(Semaphore::new(0));
-        let num_streams = u32::try_from(streams.len()).unwrap();
         let last_io_error = Arc::new(Mutex::new(None));
 
         let mut recv_tasks = JoinSet::new();
         for mut stream in streams {
             let recv_buf_inserted = recv_buf_inserted.clone();
             let recv_buf = recv_buf.clone();
-            let dead_streams = dead_streams.clone();
             let last_io_error = last_io_error.clone();
             recv_tasks.spawn(async move {
-                defer! { dead_streams.add_permits(1); };
-
                 loop {
                     let res = Message::decode(&mut stream).await;
                     let message = match res {
@@ -83,11 +71,9 @@ impl Receiver {
         Self {
             recv_buf,
             recv_buf_inserted,
-            dead_streams,
-            num_streams,
             leftover_data_segment: None,
             last_io_error,
-            _recv_tasks: recv_tasks,
+            recv_tasks,
         }
     }
 
@@ -117,9 +103,12 @@ impl Receiver {
 
             tokio::select! {
                 () = recv_buf_inserted => (),
-                res = self.dead_streams.acquire_many(self.num_streams) => {
-                    let _ = res.unwrap();
-                    self.dead_streams.add_permits(self.num_streams as usize);
+                res = self.recv_tasks.join_next() => {
+                    if let Some(task) = res {
+                        task.unwrap();
+                        continue;
+                    }
+
                     let mut last_io_error = self.last_io_error.lock().unwrap();
                     match last_io_error.take() {
                         Some(e) => return Err(e),
