@@ -41,9 +41,8 @@ where
         let segments = send_buf.iter_unsent_segments();
 
         for segment in segments {
-            let mut stream = match self.streams.pop_front() {
-                Some(stream) => stream,
-                None => break,
+            let Some(mut stream) = self.streams.pop_front() else {
+                break;
             };
 
             write_tasks.spawn(async move {

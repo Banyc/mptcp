@@ -84,17 +84,11 @@ impl MptcpStream {
     }
 
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Local(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.local()
     }
 
     pub fn peer_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Peer(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.peer()
     }
 }
 
@@ -146,17 +140,11 @@ impl OwnedReadHalf {
     }
 
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Local(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.local()
     }
 
     pub fn peer_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Peer(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.peer()
     }
 }
 
@@ -184,17 +172,11 @@ impl OwnedWriteHalf {
     }
 
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Local(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.local()
     }
 
     pub fn peer_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Peer(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.peer()
     }
 }
 
@@ -230,17 +212,11 @@ pub struct ReadHalf<'poll> {
 
 impl ReadHalf<'_> {
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Local(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.local()
     }
 
     pub fn peer_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Peer(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.peer()
     }
 }
 
@@ -262,17 +238,11 @@ pub struct WriteHalf<'poll> {
 
 impl WriteHalf<'_> {
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Local(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.local()
     }
 
     pub fn peer_addr(&self) -> Option<SocketAddr> {
-        if let SingleAddress::Peer(addr) = self.addr {
-            return Some(addr);
-        }
-        None
+        self.addr.peer()
     }
 }
 
@@ -304,4 +274,20 @@ impl AsyncWrite for WriteHalf<'_> {
 pub(crate) enum SingleAddress {
     Local(SocketAddr),
     Peer(SocketAddr),
+}
+
+impl SingleAddress {
+    pub fn local(&self) -> Option<SocketAddr> {
+        match self {
+            SingleAddress::Local(local) => Some(*local),
+            SingleAddress::Peer(_) => None,
+        }
+    }
+
+    pub fn peer(&self) -> Option<SocketAddr> {
+        match self {
+            SingleAddress::Local(_) => None,
+            SingleAddress::Peer(peer) => Some(*peer),
+        }
+    }
 }

@@ -18,9 +18,8 @@ impl RecvStreamBuf {
 
     pub fn insert(&mut self, data_segment: DataSegment) {
         // Remove stale data
-        let data_segment = match data_segment.advance_to(self.next) {
-            Some(data_segment) => data_segment,
-            None => return,
+        let Some(data_segment) = data_segment.advance_to(self.next) else {
+            return;
         };
 
         // Resolve key conflict
@@ -35,9 +34,8 @@ impl RecvStreamBuf {
     }
 
     pub fn pop_first(&mut self) -> Option<DataSegment> {
-        let (first_key, _) = match self.data_segments.first_key_value() {
-            Some(first) => first,
-            None => return None,
+        let Some((first_key, _)) = self.data_segments.first_key_value() else {
+            return None;
         };
         if *first_key != self.next {
             return None;
@@ -54,9 +52,8 @@ impl RecvStreamBuf {
                     break;
                 }
             }
-            let data_segment = match self.data_segments.pop_first() {
-                Some((_, v)) => v,
-                None => break,
+            let Some((_, data_segment)) = self.data_segments.pop_first() else {
+                break;
             };
 
             let data_segment = data_segment.advance_to(self.next);

@@ -1,5 +1,7 @@
 # Multi-path TCP
 
+![Session](img/session.drawio.png)
+
 ## How to transfer a file
 
 1. Install Rust: <https://www.rust-lang.org/tools/install>

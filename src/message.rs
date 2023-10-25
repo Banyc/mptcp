@@ -38,9 +38,8 @@ impl Message {
         let type_code = reader.read_u8().await?;
         let this = match type_code {
             DATA_SEGMENT_TYPE_CODE => {
-                let data_segment = match DataSegment::decode(reader).await? {
-                    Some(data_segment) => data_segment,
-                    None => return Ok(None),
+                let Some(data_segment) = DataSegment::decode(reader).await? else {
+                    return Ok(None);
                 };
                 Self::DataSegment(data_segment)
             }

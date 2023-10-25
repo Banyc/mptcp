@@ -35,9 +35,8 @@ impl SendStreamBuf {
         if self.unsent_segments.len() >= segments {
             return;
         }
-        let (sequence, length) = match self.unsent_segments.pop_first() {
-            Some(segment) => segment,
-            None => return,
+        let Some((sequence, length)) = self.unsent_segments.pop_first() else {
+            return;
         };
 
         let segment_bytes = length.div_ceil(segments).max(MINIMUM_PAYLOAD_SIZE);
