@@ -138,6 +138,7 @@ impl Receiver {
             {
                 let mut recv_buf = self.recv_buf.write().unwrap();
                 if let Some(data_segment) = recv_buf.pop_first() {
+                    drop(recv_buf);
                     return handle_data_segment(data_segment);
                 }
             }
