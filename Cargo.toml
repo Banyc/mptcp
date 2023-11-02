@@ -16,3 +16,6 @@ rand = "0.8.5"
 scopeguard = "1.2.0"
 thiserror = "1.0.50"
 tokio = { version = "1.33.0", features = ["io-util", "rt", "macros", "sync", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1.33.0", features = ["full"] }
