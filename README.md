@@ -21,7 +21,7 @@
 Server:
 
 ```rust
-let listener = MptcpListener::bind(addr, max_session_streams).await.unwrap();
+let mut listener = MptcpListener::bind(addr, max_session_streams).await.unwrap();
 let stream = listener.accept().await.unwrap();
 let (mut read, mut write) = stream.into_split();
 let mut buf = [0; 13];
