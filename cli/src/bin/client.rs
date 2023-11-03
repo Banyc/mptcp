@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 
 use clap::Parser;
-use cli::FileTransferCommand;
+use cli::{print_performance_statistics, FileTransferCommand};
 use mptcp::stream::MptcpStream;
 
 #[derive(Debug, Parser)]
@@ -23,9 +23,12 @@ async fn main() {
         .unwrap();
     let (read, write) = stream.into_split();
 
+    let start = std::time::Instant::now();
     let n = args.file_transfer.perform(read, write).await.unwrap();
+    let duration = start.elapsed();
     match &args.file_transfer {
         FileTransferCommand::Push(_) => println!("Read {n} bytes"),
         FileTransferCommand::Pull(_) => println!("Wrote {n} bytes"),
     }
+    print_performance_statistics(n, duration);
 }

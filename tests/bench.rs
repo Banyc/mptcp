@@ -38,9 +38,9 @@ async fn bench_client(listen_addr: SocketAddr) {
     }
     let duration = start.elapsed();
     let throughput = (buf.len() * ROUNDS) as f64 / duration.as_secs_f64();
-    let throughput_mib_s = throughput / 1000. / 1000.;
-    let latency = duration.as_secs_f64() / ROUNDS as f64;
-    println!("throughput: {throughput_mib_s:.2} MiB/s, latency: {latency} s");
+    let throughput_mib_s = throughput / 1024. / 1024.;
+    let latency_ms = duration.as_secs_f64() * 1000. / ROUNDS as f64;
+    println!("throughput: {throughput_mib_s:.2} MiB/s, latency: {latency_ms:.2} ms");
 }
 
 #[ignore]
