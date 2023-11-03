@@ -18,7 +18,7 @@ pub struct Cli {
 async fn main() {
     let args = Cli::parse();
 
-    let listener = MptcpListener::bind(args.listen, args.streams)
+    let mut listener = MptcpListener::bind(args.listen, args.streams)
         .await
         .unwrap();
     let stream = listener.accept().await.unwrap();
