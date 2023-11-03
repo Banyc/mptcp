@@ -85,3 +85,24 @@ pub fn print_performance_statistics(n: usize, duration: std::time::Duration) {
     let latency_ms = duration.as_secs_f64() * 1000.;
     println!("throughput: {throughput_mib_s:.2} MiB/s, latency: {latency_ms:.2} ms");
 }
+
+pub enum Protocol {
+    Tcp,
+    Mptcp { streams: std::num::NonZeroUsize },
+}
+
+impl std::str::FromStr for Protocol {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "tcp" {
+            return Ok(Self::Tcp);
+        }
+        if s.starts_with("mptcp.") {
+            let (_, streams) = s.split_once('.').ok_or(())?;
+            let streams = streams.parse().map_err(|_| ())?;
+            return Ok(Self::Mptcp { streams });
+        }
+        Err(())
+    }
+}

@@ -1,13 +1,13 @@
-use std::num::NonZeroUsize;
-
 use clap::Parser;
-use cli::{print_performance_statistics, FileTransferCommand};
+use cli::{print_performance_statistics, FileTransferCommand, Protocol};
 use mptcp::stream::MptcpStream;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
 
 #[derive(Debug, Parser)]
 pub struct Cli {
-    /// The number of TCP streams to connect
-    pub streams: NonZeroUsize,
     /// The server address
     pub server: String,
     #[command(subcommand)]
@@ -18,10 +18,22 @@ pub struct Cli {
 async fn main() {
     let args = Cli::parse();
 
-    let stream = MptcpStream::connect(args.server, args.streams)
-        .await
-        .unwrap();
-    let (read, write) = stream.into_split();
+    let (protocol, internet_address) = args.server.split_once("://").unwrap();
+    let protocol: Protocol = protocol.parse().expect("Unknown protocol");
+    let (read, write): (Box<dyn AsyncRead + Unpin>, Box<dyn AsyncWrite + Unpin>) = match protocol {
+        Protocol::Tcp => {
+            let stream = TcpStream::connect(internet_address).await.unwrap();
+            let (read, write) = stream.into_split();
+            (Box::new(read), Box::new(write))
+        }
+        Protocol::Mptcp { streams } => {
+            let stream = MptcpStream::connect(internet_address.to_string(), streams)
+                .await
+                .unwrap();
+            let (read, write) = stream.into_split();
+            (Box::new(read), Box::new(write))
+        }
+    };
 
     let start = std::time::Instant::now();
     let n = args.file_transfer.perform(read, write).await.unwrap();
