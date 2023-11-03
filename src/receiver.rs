@@ -80,8 +80,7 @@ impl Receiver {
                     };
 
                     let message = match res {
-                        Ok(Some(message)) => message,
-                        Ok(None) => continue,
+                        Ok(message) => message,
                         Err(e) => {
                             let mut last_io_error = last_io_error.lock().unwrap();
                             *last_io_error = Some(e);

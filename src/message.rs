@@ -31,16 +31,14 @@ impl Message {
         Ok(())
     }
 
-    pub async fn decode<R>(reader: &mut R) -> io::Result<Option<Self>>
+    pub async fn decode<R>(reader: &mut R) -> io::Result<Self>
     where
         R: AsyncRead + Unpin,
     {
         let type_code = reader.read_u8().await?;
         let this = match type_code {
             DATA_SEGMENT_TYPE_CODE => {
-                let Some(data_segment) = DataSegment::decode(reader).await? else {
-                    return Ok(None);
-                };
+                let data_segment = DataSegment::decode(reader).await?;
                 Self::DataSegment(data_segment)
             }
             PING_TYPE_CODE => Self::Ping,
@@ -52,7 +50,7 @@ impl Message {
                 ))
             }
         };
-        Ok(Some(this))
+        Ok(this)
     }
 }
 
@@ -121,7 +119,7 @@ impl DataSegment {
         self.payload.len()
     }
 
-    pub async fn decode<R>(reader: &mut R) -> io::Result<Option<Self>>
+    pub async fn decode<R>(reader: &mut R) -> io::Result<Self>
     where
         R: AsyncRead + Unpin,
     {
@@ -132,7 +130,9 @@ impl DataSegment {
         let mut payload = BytesMut::with_capacity(length);
         payload.put_bytes(0, length);
         reader.read_exact(&mut payload[..]).await?;
-        Ok(Self::new(Sequence::new(start_sequence), payload.into()))
+        let this = Self::new(Sequence::new(start_sequence), payload.into())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid data segment"))?;
+        Ok(this)
     }
 }
 
@@ -229,7 +229,7 @@ mod tests {
         let mut buf = vec![];
         src.encode(&mut buf).await.unwrap();
         let mut reader = io::Cursor::new(&buf[..]);
-        let dst = DataSegment::decode(&mut reader).await.unwrap().unwrap();
+        let dst = DataSegment::decode(&mut reader).await.unwrap();
         assert_eq!(src.start_sequence(), dst.start_sequence());
         assert_eq!(src.payload(), dst.payload());
     }
