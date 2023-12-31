@@ -34,9 +34,7 @@ impl RecvStreamBuf {
     }
 
     pub fn pop_first(&mut self) -> Option<DataSegment> {
-        let Some((first_key, _)) = self.data_segments.first_key_value() else {
-            return None;
-        };
+        let (first_key, _) = self.data_segments.first_key_value()?;
         if *first_key != self.next {
             return None;
         }

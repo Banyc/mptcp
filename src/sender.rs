@@ -1,7 +1,6 @@
 use std::{collections::VecDeque, io};
 
 use async_async_io::write::{AsyncAsyncWrite, PollWrite};
-use async_trait::async_trait;
 use bytes::Bytes;
 use thiserror::Error;
 use tokio::{
@@ -123,7 +122,6 @@ where
     }
 }
 
-#[async_trait]
 impl<W> AsyncAsyncWrite for Sender<W>
 where
     W: AsyncWrite + Unpin + Send + 'static,

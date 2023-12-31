@@ -5,7 +5,6 @@ use std::{
 };
 
 use async_async_io::read::{AsyncAsyncRead, PollRead};
-use async_trait::async_trait;
 use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
@@ -172,7 +171,6 @@ impl Drop for Receiver {
     }
 }
 
-#[async_trait]
 impl AsyncAsyncRead for Receiver {
     async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self.recv(buf).await {
