@@ -19,7 +19,7 @@ use crate::{
 
 const BACKLOG_TIMEOUT: Duration = Duration::from_secs(60);
 const INIT_TIMEOUT: Duration = Duration::from_secs(1);
-const BACKLOG_MAX: usize = 1024;
+const BACKLOG_MAX: usize = 64;
 
 #[derive(Debug)]
 pub struct MptcpListener {
