@@ -32,18 +32,22 @@ impl MptcpStream {
     }
 
     pub async fn connect(
-        addr: impl ToSocketAddrs + Clone + Send + Sync + 'static,
-        streams: NonZeroUsize,
+        addrs: impl Iterator<Item = impl ToSocketAddrs + Clone + Send + Sync + 'static> + Clone,
     ) -> io::Result<Self> {
         let mut read_streams = vec![];
         let mut write_streams = vec![];
         let session: u64 = rand::random();
         let session = Session::new(session);
-        let init = Init::new(session, streams);
+        let num_streams = NonZeroUsize::new(addrs.clone().count()).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "number of addresses cannot be zero",
+            )
+        })?;
+        let init = Init::new(session, num_streams);
 
         let mut connections = JoinSet::new();
-        for _ in 0..streams.get() {
-            let addr = addr.clone();
+        for addr in addrs {
             let init = init.clone();
             connections.spawn(async move {
                 let mut stream = TcpStream::connect(&addr).await?;

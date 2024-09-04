@@ -27,9 +27,11 @@ async fn main() {
             (Box::new(read), Box::new(write))
         }
         Protocol::Mptcp { streams } => {
-            let stream = MptcpStream::connect(internet_address.to_string(), streams)
-                .await
-                .unwrap();
+            let addrs = core::iter::repeat(())
+                .take(streams.get())
+                .map(|()| internet_address.to_string())
+                .collect::<Vec<String>>();
+            let stream = MptcpStream::connect(addrs.iter().cloned()).await.unwrap();
             let (read, write) = stream.into_split();
             (Box::new(read), Box::new(write))
         }

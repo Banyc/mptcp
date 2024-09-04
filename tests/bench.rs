@@ -28,9 +28,8 @@ async fn bench_server() -> (SocketAddr, JoinSet<()>) {
 
 async fn bench_client(listen_addr: SocketAddr) {
     const ROUNDS: usize = 100;
-    let mut client = MptcpStream::connect(listen_addr, NonZeroUsize::new(STREAMS).unwrap())
-        .await
-        .unwrap();
+    let addrs = core::iter::repeat(()).take(STREAMS).map(|()| listen_addr);
+    let mut client = MptcpStream::connect(addrs).await.unwrap();
     let buf: Vec<u8> = (0..PAYLOAD_SIZE).map(|_| rand::random()).collect();
     let start = Instant::now();
     for _ in 0..ROUNDS {

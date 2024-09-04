@@ -129,7 +129,7 @@ where
     async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         {
             // SAFETY: `data` will be dropped outside of this scope
-            let data = Bytes::from_static(unsafe { std::mem::transmute(buf) });
+            let data = Bytes::from_static(unsafe { std::mem::transmute::<&[u8], &[u8]>(buf) });
             self.batch_send_all(data)
                 .await
                 .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))?;

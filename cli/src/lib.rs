@@ -70,6 +70,7 @@ pub async fn pull_file(
     let mut file = File::options()
         .write(true)
         .create(true)
+        .truncate(true)
         .open(output_file)
         .await
         .unwrap();
