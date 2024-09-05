@@ -28,7 +28,7 @@ async fn main() {
             (Box::new(read), Box::new(write))
         }
         Protocol::Mptcp { streams } => {
-            let mut listener = MptcpListener::bind(internet_address, streams)
+            let mut listener = MptcpListener::bind([internet_address].iter(), streams)
                 .await
                 .unwrap();
             let stream = listener.accept().await.unwrap();

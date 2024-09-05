@@ -23,41 +23,52 @@ const BACKLOG_MAX: usize = 64;
 
 #[derive(Debug)]
 pub struct MptcpListener {
-    listener: Arc<TcpListener>,
+    listeners: Vec<Arc<TcpListener>>,
     complete: tokio::sync::mpsc::Receiver<io::Result<MptcpStream>>,
     _tasks: JoinSet<()>,
 }
 
 impl MptcpListener {
     pub async fn bind(
-        addr: impl ToSocketAddrs,
+        addrs: impl Iterator<Item = impl ToSocketAddrs>,
         max_session_streams: NonZeroUsize,
     ) -> io::Result<Self> {
-        let listener = Arc::new(TcpListener::bind(addr).await?);
+        let mut listeners = vec![];
         let (tx, rx) = tokio::sync::mpsc::channel(BACKLOG_MAX);
-
         let backlog = Arc::new(Backlog::new(
             NonZeroUsize::new(BACKLOG_MAX).unwrap(),
             max_session_streams,
         ));
-
         let mut tasks = JoinSet::new();
-        for _ in 0..BACKLOG_MAX {
-            let backlog = Arc::clone(&backlog);
-            let listener = Arc::clone(&listener);
-            let complete = tx.clone();
-            tasks.spawn(async move {
-                loop {
-                    let (stream, _) = match listener.accept().await {
-                        Ok(x) => x,
-                        Err(e) => {
-                            let _ = complete.send(Err(e)).await;
-                            continue;
+        for addr in addrs {
+            let listener = Arc::new(TcpListener::bind(addr).await?);
+            for _ in 0..BACKLOG_MAX {
+                tasks.spawn({
+                    let backlog = Arc::clone(&backlog);
+                    let listener = Arc::clone(&listener);
+                    let complete = tx.clone();
+                    async move {
+                        loop {
+                            let (stream, _) = match listener.accept().await {
+                                Ok(x) => x,
+                                Err(e) => {
+                                    let _ = complete.send(Err(e)).await;
+                                    continue;
+                                }
+                            };
+                            // This call could take `INIT_TIMEOUT` if being attacked
+                            backlog.handle(stream, &complete).await;
                         }
-                    };
-                    backlog.handle(stream, &complete).await;
-                }
-            });
+                    }
+                });
+            }
+            listeners.push(listener);
+        }
+        if listeners.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "number of addresses cannot be zero",
+            ));
         }
         tasks.spawn({
             let backlog = Arc::clone(&backlog);
@@ -69,9 +80,8 @@ impl MptcpListener {
                 }
             }
         });
-
         Ok(Self {
-            listener,
+            listeners,
             complete: rx,
             _tasks: tasks,
         })
@@ -87,14 +97,14 @@ impl MptcpListener {
             .expect("senders will never drop proactively")
     }
 
-    pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.listener.local_addr()
+    pub fn local_addrs(&self) -> impl Iterator<Item = io::Result<SocketAddr>> + '_ {
+        self.listeners.iter().map(|listener| listener.local_addr())
     }
 }
 
 #[derive(Debug)]
 struct Backlog {
-    queued: RwLock<HashMap<Session, QueuedConnection>>,
+    incomplete: RwLock<HashMap<Session, IncompleteConnection>>,
     queue_max: NonZeroUsize,
     max_session_streams: NonZeroUsize,
 }
@@ -102,17 +112,17 @@ struct Backlog {
 impl Backlog {
     pub fn new(queue_max: NonZeroUsize, max_session_streams: NonZeroUsize) -> Self {
         Self {
-            queued: RwLock::new(HashMap::new()),
+            incomplete: RwLock::new(HashMap::new()),
             queue_max,
             max_session_streams,
         }
     }
 
     pub fn clean(&self, timeout: Duration) {
-        self.queued
+        self.incomplete
             .write()
             .unwrap()
-            .retain(|_, v: &mut QueuedConnection| !v.timed_out(timeout));
+            .retain(|_, v: &mut IncompleteConnection| !v.timed_out(timeout));
     }
 
     pub async fn handle(
@@ -131,24 +141,24 @@ impl Backlog {
             }
 
             let stream = loop {
-                let mut queued = this.queued.write().unwrap();
-                match queued.remove(&init.session()) {
-                    Some(queued_connection) => {
-                        let res = queued_connection.push(stream);
+                let mut incomplete = this.incomplete.write().unwrap();
+                match incomplete.remove(&init.session()) {
+                    Some(incomplete_conn) => {
+                        let res = incomplete_conn.push(stream);
                         match res {
-                            QueuedConnectionPushResult::QueuedConnection(queued_connection) => {
-                                queued.insert(init.session(), queued_connection);
+                            IncompleteConnectionPushResult::Incomplete(incomplete_conn) => {
+                                incomplete.insert(init.session(), incomplete_conn);
                                 break None;
                             }
-                            QueuedConnectionPushResult::Stream(stream) => break Some(stream),
+                            IncompleteConnectionPushResult::Complete(stream) => break Some(stream),
                         }
                     }
                     None => {
-                        if queued.len() >= this.queue_max.get() {
+                        if this.queue_max.get() <= incomplete.len() {
                             break None;
                         }
-                        let queued_connection = QueuedConnection::new(init.streams());
-                        queued.insert(init.session(), queued_connection);
+                        let incomplete_conn = IncompleteConnection::new(init.streams());
+                        incomplete.insert(init.session(), incomplete_conn);
                     }
                 }
             };
@@ -162,14 +172,14 @@ impl Backlog {
 }
 
 #[derive(Debug)]
-struct QueuedConnection {
+struct IncompleteConnection {
     read_streams: Vec<tcp::OwnedReadHalf>,
     write_streams: Vec<tcp::OwnedWriteHalf>,
     max: NonZeroUsize,
     last_update: Instant,
 }
 
-impl QueuedConnection {
+impl IncompleteConnection {
     pub fn new(number: NonZeroUsize) -> Self {
         Self {
             read_streams: Vec::new(),
@@ -179,17 +189,17 @@ impl QueuedConnection {
         }
     }
 
-    pub fn push(mut self, stream: TcpStream) -> QueuedConnectionPushResult {
+    pub fn push(mut self, stream: TcpStream) -> IncompleteConnectionPushResult {
         let addr = SingleAddress::Local(stream.local_addr().unwrap());
         let (read, write) = stream.into_split();
         self.read_streams.push(read);
         self.write_streams.push(write);
         if self.read_streams.len() == self.max.get() {
             let stream = MptcpStream::new(self.read_streams, self.write_streams, addr);
-            return QueuedConnectionPushResult::Stream(stream);
+            return IncompleteConnectionPushResult::Complete(stream);
         }
         self.last_update = Instant::now();
-        QueuedConnectionPushResult::QueuedConnection(self)
+        IncompleteConnectionPushResult::Incomplete(self)
     }
 
     pub fn timed_out(&self, timeout: Duration) -> bool {
@@ -198,7 +208,7 @@ impl QueuedConnection {
 }
 
 #[derive(Debug)]
-enum QueuedConnectionPushResult {
-    QueuedConnection(QueuedConnection),
-    Stream(MptcpStream),
+enum IncompleteConnectionPushResult {
+    Incomplete(IncompleteConnection),
+    Complete(MptcpStream),
 }

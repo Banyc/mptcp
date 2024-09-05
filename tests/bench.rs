@@ -11,10 +11,11 @@ const STREAMS: usize = 4;
 const PAYLOAD_SIZE: usize = 1 << 24;
 
 async fn bench_server() -> (SocketAddr, JoinSet<()>) {
-    let mut server = MptcpListener::bind("127.0.0.1:0", NonZeroUsize::new(STREAMS).unwrap())
-        .await
-        .unwrap();
-    let listen_addr = server.local_addr().unwrap();
+    let mut server =
+        MptcpListener::bind(["127.0.0.1:0"].iter(), NonZeroUsize::new(STREAMS).unwrap())
+            .await
+            .unwrap();
+    let listen_addr = server.local_addrs().next().unwrap().unwrap();
     let mut listen_task = JoinSet::new();
     listen_task.spawn(async move {
         let mut buf = BytesMut::new();
